@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ace Version Control</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <div id="status-dot" class="status-dot"></div>
+            <span class="header-title">Ace Version Control</span>
+        </div>
+        <div class="header-actions">
+            <button id="settings-btn" class="icon-btn" title="Settings">&#9881;</button>
+        </div>
+    </div>
+
+    <!-- Init Panel (shown when not tracking) -->
+    <div id="init-panel" class="init-panel">
+        <div class="icon">&#128193;</div>
+        <p>Track changes to your Premiere Pro project with git-based snapshots.</p>
+        <button id="init-btn" class="init-btn">Start Tracking</button>
+    </div>
+
+    <!-- Main Panel (shown when tracking) -->
+    <div id="main-panel" style="display:none; flex-direction:column; flex:1; min-height:0;">
+        <div class="project-info" id="project-info"></div>
+
+        <div id="timeline-container" class="timeline-container">
+            <div id="timeline" class="timeline"></div>
+            <div id="empty-state" class="empty-state" style="display:none;">No snapshots yet</div>
+            <div id="load-more" class="load-more" style="display:none;">
+                <button id="load-more-btn" class="load-more-btn">Load more</button>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <div class="snapshot-row">
+                <input id="snapshot-input" class="snapshot-input" type="text" placeholder="Snapshot message (optional)" maxlength="200">
+                <button id="snapshot-btn" class="snapshot-btn">Snapshot</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">Settings</div>
+            <div class="modal-row">
+                <span class="modal-label">Auto-snapshot on save</span>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-save-toggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">Auto-snapshot interval</span>
+                <select id="interval-select" class="modal-select">
+                    <option value="0">Off</option>
+                    <option value="5">5 min</option>
+                    <option value="10">10 min</option>
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="60">60 min</option>
+                </select>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">Max snapshots</span>
+                <select id="max-snapshots-select" class="modal-select">
+                    <option value="0">Unlimited</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button id="settings-cancel" class="modal-btn secondary">Cancel</button>
+                <button id="settings-save" class="modal-btn primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirm-modal" class="modal-overlay confirm-dialog">
+        <div class="modal">
+            <div class="modal-title">Confirm Restore</div>
+            <div id="confirm-text" class="confirm-text"></div>
+            <div class="modal-actions">
+                <button id="confirm-no" class="modal-btn secondary">Cancel</button>
+                <button id="confirm-yes" class="modal-btn primary">Restore</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts (load order matters — debug-console first to capture all logs) -->
+    <script src="js/cep/CSInterface.js"></script>
+    <script src="js/debug-console.js"></script>
+    <script src="js/bridge.js"></script>
+    <script src="js/prproj-handler.js"></script>
+    <script src="js/git-manager.js"></script>
+    <script src="js/version-controller.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
