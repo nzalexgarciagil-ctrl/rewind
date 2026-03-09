@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="11.0" ExtensionBundleId="com.ace.versioncontrol"
-  ExtensionBundleVersion="1.0.0" ExtensionBundleName="Ace Version Control"
+<ExtensionManifest Version="11.0" ExtensionBundleId="com.ppgit.versioncontrol"
+  ExtensionBundleVersion="1.0.0" ExtensionBundleName="ppgit"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <ExtensionList>
-    <Extension Id="com.ace.versioncontrol.panel" Version="1.0.0" />
+    <Extension Id="com.ppgit.versioncontrol.panel" Version="1.0.0" />
   </ExtensionList>
 
   <ExecutionEnvironment>
@@ -20,14 +20,13 @@
   </ExecutionEnvironment>
 
   <DispatchInfoList>
-    <Extension Id="com.ace.versioncontrol.panel">
+    <Extension Id="com.ppgit.versioncontrol.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
           <ScriptPath>./host/host.jsx</ScriptPath>
           <CEFCommandLine>
             <Parameter>--enable-nodejs</Parameter>
-            <Parameter>--allow-file-access-from-files</Parameter>
           </CEFCommandLine>
         </Resources>
         <Lifecycle>
@@ -35,7 +34,7 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>Ace Version Control</Menu>
+          <Menu>ppgit</Menu>
           <Geometry>
             <Size>
               <Height>500</Height>

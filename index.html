@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ace Version Control</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://api.github.com https://*.githubusercontent.com; img-src 'self' data: https://*.githubusercontent.com;">
+    <title>ppgit</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -11,17 +12,42 @@
     <div class="header">
         <div class="header-left">
             <div id="status-dot" class="status-dot"></div>
-            <span class="header-title">Ace Version Control</span>
+            <span class="header-title">ppgit</span>
         </div>
         <div class="header-actions">
+            <button id="github-btn" class="icon-btn" title="GitHub">&#9729;</button>
             <button id="settings-btn" class="icon-btn" title="Settings">&#9881;</button>
+        </div>
+    </div>
+
+    <!-- GitHub Setup Panel (shown when not connected) -->
+    <div id="github-panel" class="github-panel" style="display:none;">
+        <div class="github-setup">
+            <div class="icon">&#128279;</div>
+            <p class="github-heading">Connect to GitHub</p>
+            <p class="github-desc">Back up your project versions to a private GitHub repository.</p>
+            <div class="github-token-row">
+                <input id="github-token" class="github-token-input" type="password" placeholder="Paste your GitHub token">
+                <button id="github-connect-btn" class="snapshot-btn">Connect</button>
+            </div>
+            <p class="github-help">Need a token? Go to GitHub &gt; Settings &gt; Developer settings &gt; Personal access tokens &gt; Generate new token. Select <strong>repo</strong> scope.</p>
+        </div>
+    </div>
+
+    <!-- GitHub Connected Info -->
+    <div id="github-info" class="github-info" style="display:none;">
+        <div class="github-user-row">
+            <img id="github-avatar" class="github-avatar" src="" alt="">
+            <span id="github-username" class="github-username"></span>
+            <button id="github-sync-btn" class="sync-btn" title="Sync to GitHub">&#8635; Sync</button>
+            <button id="github-logout-btn" class="icon-btn" title="Disconnect">&#10005;</button>
         </div>
     </div>
 
     <!-- Init Panel (shown when not tracking) -->
     <div id="init-panel" class="init-panel">
         <div class="icon">&#128193;</div>
-        <p>Track changes to your Premiere Pro project with git-based snapshots.</p>
+        <p>Track changes to your Premiere Pro project with automatic snapshots.</p>
         <button id="init-btn" class="init-btn">Start Tracking</button>
     </div>
 
@@ -68,14 +94,11 @@
                 </select>
             </div>
             <div class="modal-row">
-                <span class="modal-label">Max snapshots</span>
-                <select id="max-snapshots-select" class="modal-select">
-                    <option value="0">Unlimited</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                    <option value="200">200</option>
-                    <option value="500">500</option>
-                </select>
+                <span class="modal-label">Auto-sync to GitHub</span>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-push-toggle">
+                    <span class="toggle-slider"></span>
+                </label>
             </div>
             <div class="modal-actions">
                 <button id="settings-cancel" class="modal-btn secondary">Cancel</button>
@@ -99,12 +122,13 @@
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
-    <!-- Scripts (load order matters — debug-console first to capture all logs) -->
+    <!-- Scripts -->
     <script src="js/cep/CSInterface.js"></script>
     <script src="js/debug-console.js"></script>
     <script src="js/bridge.js"></script>
     <script src="js/prproj-handler.js"></script>
     <script src="js/git-manager.js"></script>
+    <script src="js/github-manager.js"></script>
     <script src="js/version-controller.js"></script>
     <script src="js/app.js"></script>
 </body>

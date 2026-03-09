@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionList>
-  <Extension Id="com.ace.versioncontrol.panel">
+  <Extension Id="com.ppgit.versioncontrol.panel">
     <HostList>
       <Host Name="PPRO" Port="35823" />
     </HostList>

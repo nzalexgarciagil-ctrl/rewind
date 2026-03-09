@@ -1,4 +1,4 @@
-// app.js - UI controller
+// app.js - UI controller for ppgit
 
 (function() {
     'use strict';
@@ -15,10 +15,11 @@
         if (window.DebugConsole) {
             DebugConsole.initialize();
         }
-        console.log('Ace Version Control: panel loaded');
+        console.log('ppgit: panel loaded');
         cacheElements();
         bindEvents();
         listenToVC();
+        checkGitHub();
         checkProject();
     }
 
@@ -43,10 +44,21 @@
         els.confirmNo = document.getElementById('confirm-no');
         els.autoSaveToggle = document.getElementById('auto-save-toggle');
         els.intervalSelect = document.getElementById('interval-select');
-        els.maxSnapshotsSelect = document.getElementById('max-snapshots-select');
+        els.autoPushToggle = document.getElementById('auto-push-toggle');
         els.settingsSave = document.getElementById('settings-save');
         els.settingsCancel = document.getElementById('settings-cancel');
         els.toast = document.getElementById('toast');
+
+        // GitHub elements
+        els.githubBtn = document.getElementById('github-btn');
+        els.githubPanel = document.getElementById('github-panel');
+        els.githubToken = document.getElementById('github-token');
+        els.githubConnectBtn = document.getElementById('github-connect-btn');
+        els.githubInfo = document.getElementById('github-info');
+        els.githubAvatar = document.getElementById('github-avatar');
+        els.githubUsername = document.getElementById('github-username');
+        els.githubSyncBtn = document.getElementById('github-sync-btn');
+        els.githubLogoutBtn = document.getElementById('github-logout-btn');
     }
 
     function bindEvents() {
@@ -60,6 +72,15 @@
         els.settingsCancel.addEventListener('click', function() { hideModal(els.settingsModal); });
         els.confirmNo.addEventListener('click', function() { hideModal(els.confirmModal); });
         els.loadMoreBtn.addEventListener('click', loadMoreHistory);
+
+        // GitHub events
+        els.githubBtn.addEventListener('click', toggleGitHubPanel);
+        els.githubConnectBtn.addEventListener('click', handleGitHubConnect);
+        els.githubToken.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') handleGitHubConnect();
+        });
+        els.githubSyncBtn.addEventListener('click', handleGitHubSync);
+        els.githubLogoutBtn.addEventListener('click', handleGitHubLogout);
 
         // Close modals on overlay click
         [els.settingsModal, els.confirmModal].forEach(function(modal) {
@@ -78,6 +99,10 @@
                     showProjectPath(data.projectPath);
                     refreshHistory();
                     showToast('Tracking initialized', 'success');
+                    // Auto-setup GitHub remote if connected
+                    if (window.GitHubManager && GitHubManager.isAuthenticated()) {
+                        setupGitHubRemote();
+                    }
                     break;
                 case 'snapshot':
                 case 'auto-snapshot':
@@ -114,8 +139,8 @@
                 // Check if already tracked
                 var path = cep_node.require('path');
                 var fs = cep_node.require('fs');
-                var dir = path.dirname(projectPath.replace(/\//g, '\\'));
-                if (fs.existsSync(path.join(dir, '.ace-vc'))) {
+                var dir = path.dirname(path.normalize(projectPath));
+                if (fs.existsSync(path.join(dir, '.ppgit'))) {
                     handleInit();
                     return;
                 }
@@ -162,15 +187,28 @@
         els.confirmText.textContent = 'Current state will be saved first. Restore to this snapshot?';
         showModal(els.confirmModal);
 
-        // One-time handler
-        var handler = function() {
-            els.confirmYes.removeEventListener('click', handler);
+        var confirmHandler, cancelHandler;
+
+        function cleanup() {
+            els.confirmYes.removeEventListener('click', confirmHandler);
+            els.confirmNo.removeEventListener('click', cancelHandler);
+        }
+
+        confirmHandler = function() {
+            cleanup();
             hideModal(els.confirmModal);
             VersionController.restore(commitHash).catch(function(err) {
                 showToast('Restore failed: ' + err.message, 'error');
             });
         };
-        els.confirmYes.addEventListener('click', handler);
+
+        cancelHandler = function() {
+            cleanup();
+            hideModal(els.confirmModal);
+        };
+
+        els.confirmYes.addEventListener('click', confirmHandler);
+        els.confirmNo.addEventListener('click', cancelHandler);
     }
 
     function refreshHistory() {
@@ -179,6 +217,8 @@
             historyItems = commits;
             renderTimeline(commits.slice(0, PAGE_SIZE));
             els.loadMore.style.display = commits.length > PAGE_SIZE ? 'block' : 'none';
+        }).catch(function(err) {
+            console.error('Failed to load history:', err.message);
         });
     }
 
@@ -188,6 +228,8 @@
             historyItems = commits;
             renderTimeline(commits.slice(0, historyOffset + PAGE_SIZE));
             els.loadMore.style.display = commits.length > historyOffset + PAGE_SIZE ? 'block' : 'none';
+        }).catch(function(err) {
+            console.error('Failed to load more history:', err.message);
         });
     }
 
@@ -245,12 +287,116 @@
         });
     }
 
+    // --- GitHub ---
+
+    function checkGitHub() {
+        if (window.GitHubManager && GitHubManager.isAuthenticated()) {
+            showGitHubConnected();
+        }
+    }
+
+    function toggleGitHubPanel() {
+        if (GitHubManager.isAuthenticated()) {
+            // Toggle info bar
+            var vis = els.githubInfo.style.display;
+            els.githubInfo.style.display = vis === 'none' ? 'block' : 'none';
+            els.githubPanel.style.display = 'none';
+        } else {
+            var vis2 = els.githubPanel.style.display;
+            els.githubPanel.style.display = vis2 === 'none' ? 'block' : 'none';
+        }
+    }
+
+    function handleGitHubConnect() {
+        var token = els.githubToken.value.trim();
+        if (!token) {
+            showToast('Please paste a GitHub token', 'error');
+            return;
+        }
+        els.githubConnectBtn.disabled = true;
+        els.githubConnectBtn.textContent = 'Connecting...';
+        GitHubManager.authenticate(token).then(function(user) {
+            showToast('Connected as ' + user.login, 'success');
+            showGitHubConnected();
+            els.githubPanel.style.display = 'none';
+            els.githubToken.value = '';
+            // Auto-setup remote for current project if tracking
+            var vcState = VersionController.getState();
+            if (vcState.initialized) {
+                setupGitHubRemote();
+            }
+        }).catch(function(err) {
+            showToast('GitHub auth failed: ' + err.message, 'error');
+        }).finally(function() {
+            els.githubConnectBtn.disabled = false;
+            els.githubConnectBtn.textContent = 'Connect';
+        });
+    }
+
+    function showGitHubConnected() {
+        var user = GitHubManager.getUser();
+        if (!user) return;
+        els.githubAvatar.src = user.avatar || '';
+        els.githubAvatar.style.display = user.avatar ? 'block' : 'none';
+        els.githubUsername.textContent = user.login || user.name;
+        els.githubInfo.style.display = 'block';
+        els.githubPanel.style.display = 'none';
+    }
+
+    function setupGitHubRemote() {
+        var vcState = VersionController.getState();
+        if (!vcState.projectPath) return Promise.resolve();
+        var projectName = vcState.projectPath.replace(/\\/g, '/').split('/').pop();
+        return GitHubManager.getOrCreateRepo(projectName).then(function(repo) {
+            var token = GitHubManager.getToken();
+            return GitHubManager.setupRemote(
+                VersionController.getRepoPath(),
+                repo.url,
+                token
+            );
+        }).catch(function(err) {
+            console.error('ppgit: GitHub remote setup failed:', err.message);
+        });
+    }
+
+    function handleGitHubSync() {
+        els.githubSyncBtn.disabled = true;
+        els.githubSyncBtn.textContent = 'Syncing...';
+        var repoPath = VersionController.getRepoPath();
+        if (!repoPath) {
+            showToast('No project being tracked', 'error');
+            els.githubSyncBtn.disabled = false;
+            els.githubSyncBtn.textContent = '\u21BB Sync';
+            return;
+        }
+
+        // Ensure remote is set up, then sync
+        setupGitHubRemote().then(function() {
+            return GitHubManager.sync(repoPath);
+        }).then(function() {
+            showToast('Synced to GitHub', 'success');
+        }).catch(function(err) {
+            showToast('Sync failed: ' + err.message, 'error');
+        }).finally(function() {
+            els.githubSyncBtn.disabled = false;
+            els.githubSyncBtn.textContent = '\u21BB Sync';
+        });
+    }
+
+    function handleGitHubLogout() {
+        GitHubManager.logout();
+        els.githubInfo.style.display = 'none';
+        els.githubAvatar.src = '';
+        els.githubUsername.textContent = '';
+        showToast('Disconnected from GitHub');
+    }
+
     // Settings
     function openSettings() {
         var s = VersionController.getSettings();
         els.autoSaveToggle.checked = s.autoSnapshotOnSave;
         els.intervalSelect.value = String(s.autoIntervalMinutes);
-        els.maxSnapshotsSelect.value = String(s.maxSnapshots);
+        els.autoPushToggle.checked = !!s.autoPush;
         showModal(els.settingsModal);
     }
 
@@ -258,7 +404,7 @@
         VersionController.saveSettings({
             autoSnapshotOnSave: els.autoSaveToggle.checked,
             autoIntervalMinutes: parseInt(els.intervalSelect.value, 10),
-            maxSnapshots: parseInt(els.maxSnapshotsSelect.value, 10)
+            autoPush: els.autoPushToggle.checked
         });
         hideModal(els.settingsModal);
         showToast('Settings saved', 'success');

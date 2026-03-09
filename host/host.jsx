@@ -1,4 +1,4 @@
-// host.jsx - ExtendScript for Premiere Pro (ES3)
+// host.jsx - ppgit ExtendScript backend for Premiere Pro (ES3)
 // Commands: getProjectPath, saveProject, closeAndReopenProject
 
 // JSON polyfill (Crockford with 4th replace fix)
@@ -219,12 +219,7 @@ function closeAndReopenProject(data) {
         throw new Error("No path provided");
     }
 
-    // Save first to avoid unsaved changes dialog
-    if (app.project) {
-        app.project.save();
-    }
-
-    // Close current project
+    // Close current project WITHOUT saving — the restored file is already on disk
     app.project.closeDocument();
 
     // Open the project from the given path

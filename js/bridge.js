@@ -5,6 +5,12 @@
 
     var cs = new CSInterface();
 
+    var ALLOWED_COMMANDS = {
+        getProjectPath: true,
+        saveProject: true,
+        closeAndReopenProject: true
+    };
+
     /**
      * Call an ExtendScript function via the bridge.
      * @param {string} type - Command name
@@ -13,6 +19,11 @@
      */
     function callHost(type, data) {
         return new Promise(function(resolve, reject) {
+            if (!ALLOWED_COMMANDS[type]) {
+                reject(new Error('Unknown command: ' + type));
+                return;
+            }
+
             var dataStr = data ? JSON.stringify(data) : '{}';
             // Escape for ExtendScript string literal
             dataStr = dataStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');

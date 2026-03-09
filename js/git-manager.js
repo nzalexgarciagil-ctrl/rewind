@@ -36,9 +36,9 @@
             return runGit(repoPath, ['init']);
         }).then(function() {
             // Configure user for this repo
-            return runGit(repoPath, ['config', 'user.email', 'ace-vc@local']);
+            return runGit(repoPath, ['config', 'user.email', 'ppgit@local']);
         }).then(function() {
-            return runGit(repoPath, ['config', 'user.name', 'Ace Version Control']);
+            return runGit(repoPath, ['config', 'user.name', 'ppgit']);
         });
     }
 
