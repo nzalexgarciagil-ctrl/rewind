@@ -1,7 +1,11 @@
-// debug-console.js - In-panel debug console with log interception
+// debug-console.js - In-panel debug console with log interception + file logging
 
 (function() {
     'use strict';
+
+    var fs = cep_node.require('fs');
+    var path = cep_node.require('path');
+    var os = cep_node.require('os');
 
     var consoleContainer = null;
     var logContainer = null;
@@ -10,7 +14,41 @@
     var MAX_ENTRIES = 500;
     var logBuffer = []; // Keep text copies for copy-to-clipboard
 
+    // Persistent log file in ~/.rewind/debug.log
+    var LOG_DIR = path.join(os.homedir(), '.rewind');
+    var LOG_FILE = path.join(LOG_DIR, 'debug.log');
+    var MAX_LOG_SIZE = 512 * 1024; // 512KB max, then rotate
+
+    function initLogFile() {
+        try {
+            if (!fs.existsSync(LOG_DIR)) {
+                fs.mkdirSync(LOG_DIR, { recursive: true });
+            }
+            // Rotate if too big
+            if (fs.existsSync(LOG_FILE)) {
+                var stat = fs.statSync(LOG_FILE);
+                if (stat.size > MAX_LOG_SIZE) {
+                    var oldFile = LOG_FILE + '.old';
+                    try { fs.unlinkSync(oldFile); } catch (e) {}
+                    fs.renameSync(LOG_FILE, oldFile);
+                }
+            }
+            // Write session header
+            var header = '\n=== Rewind session ' + new Date().toISOString() + ' ===\n';
+            fs.appendFileSync(LOG_FILE, header);
+        } catch (e) {
+            // Silently fail — file logging is best-effort
+        }
+    }
+
+    function writeToFile(line) {
+        try {
+            fs.appendFileSync(LOG_FILE, line + '\n');
+        } catch (e) {}
+    }
+
     function initialize() {
+        initLogFile();
         startLogListener();
         createConsoleUI();
         addLogEntry('info', ['Rewind debug console ready']);
@@ -141,9 +179,11 @@
             return String(arg);
         }).join(' ');
 
-        // Store in buffer for copy
-        logBuffer.push('[' + timeStr + '] [' + level.toUpperCase() + '] ' + text);
+        // Store in buffer for copy + write to file
+        var logLine = '[' + timeStr + '] [' + level.toUpperCase() + '] ' + text;
+        logBuffer.push(logLine);
         if (logBuffer.length > MAX_ENTRIES) logBuffer.shift();
+        writeToFile(logLine);
 
         var entry = document.createElement('div');
         entry.className = 'debug-log-entry debug-log-' + level;
