@@ -253,18 +253,17 @@
         state.dirtyTimer = setInterval(function() {
             if (!state.initialized || state.operationInProgress) return;
 
-            Bridge.callHost('isProjectDirty').then(function(dirty) {
-                if (!dirty) return; // Nothing changed since last save — skip
-                // Project has unsaved changes — save then snapshot
-                return Bridge.callHost('saveProject').then(function() {
-                    return new Promise(function(r) { setTimeout(r, 500); });
-                }).then(function() {
-                    return doSnapshot('Auto-snapshot');
-                }).then(function(committed) {
-                    if (committed) emit('auto-snapshot', {});
-                });
+            // Save unconditionally — PPro's dirty flag is unreliable.
+            // doSnapshot() checks the actual XML diff before committing,
+            // so no git commit is made if nothing really changed.
+            Bridge.callHost('saveProject').then(function() {
+                return new Promise(function(r) { setTimeout(r, 500); });
+            }).then(function() {
+                return doSnapshot('Auto-snapshot');
+            }).then(function(committed) {
+                if (committed) emit('auto-snapshot', {});
             }).catch(function(err) {
-                console.error('ppgit: dirty-poll failed:', err.message);
+                console.error('ppgit: auto-save failed:', err.message);
             });
         }, seconds * 1000);
     }

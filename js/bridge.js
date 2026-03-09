@@ -7,7 +7,6 @@
 
     var ALLOWED_COMMANDS = {
         getProjectPath: true,
-        isProjectDirty: true,
         saveProject: true,
         closeAndReopenProject: true
     };
