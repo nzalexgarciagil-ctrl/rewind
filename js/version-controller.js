@@ -46,9 +46,6 @@
 
     // --- Migration ---
 
-    /**
-     * Migrate from .ppgit to .rewind if needed
-     */
     function migrateFromPpgit() {
         if (!state.projectDir) return;
         var oldDir = path.join(state.projectDir, OLD_VC_DIR_NAME);
@@ -56,7 +53,7 @@
         try {
             if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
                 fs.renameSync(oldDir, newDir);
-                console.log('rewind: migrated .ppgit to .rewind');
+                console.info('rewind: migrated .ppgit -> .rewind');
             }
         } catch (e) {
             console.warn('rewind: migration failed, will create new:', e.message);
@@ -76,9 +73,10 @@
                         state.settings[k] = loaded[k];
                     }
                 });
+                console.log('rewind: settings loaded', state.settings);
             }
         } catch (e) {
-            console.warn('Failed to load settings:', e.message);
+            console.warn('rewind: failed to load settings:', e.message);
         }
     }
 
@@ -91,8 +89,9 @@
         try {
             var settingsPath = path.join(state.vcDir, SETTINGS_FILENAME);
             fs.writeFileSync(settingsPath, JSON.stringify(state.settings, null, 2));
+            console.log('rewind: settings saved', state.settings);
         } catch (e) {
-            console.error('Failed to save settings:', e.message);
+            console.error('rewind: failed to save settings:', e.message);
         }
         setupDirtyPoll();
         emit('settings-changed', state.settings);
@@ -105,12 +104,13 @@
             var fp = path.join(state.vcDir, BRANCHES_FILENAME);
             if (fs.existsSync(fp)) {
                 state.branches = JSON.parse(fs.readFileSync(fp, 'utf8'));
+                console.log('rewind: loaded branches', Object.keys(state.branches));
             } else {
-                // Default: master = "Main Edit"
                 state.branches = { master: { displayName: 'Main Edit', createdAt: new Date().toISOString() } };
                 saveBranches();
             }
         } catch (e) {
+            console.warn('rewind: failed to load branches:', e.message);
             state.branches = { master: { displayName: 'Main Edit', createdAt: new Date().toISOString() } };
         }
     }
@@ -131,6 +131,7 @@
             var fp = path.join(state.vcDir, LABELS_FILENAME);
             if (fs.existsSync(fp)) {
                 state.labels = JSON.parse(fs.readFileSync(fp, 'utf8'));
+                console.log('rewind: loaded', Object.keys(state.labels).length, 'labels');
             } else {
                 state.labels = {};
             }
@@ -151,8 +152,10 @@
     function addLabel(commitHash, label) {
         if (!label || !label.trim()) {
             delete state.labels[commitHash];
+            console.log('rewind: removed label for', commitHash.substring(0, 7));
         } else {
             state.labels[commitHash] = label.trim();
+            console.log('rewind: label set for', commitHash.substring(0, 7), '=', label.trim());
         }
         saveLabels();
         emit('labels-changed', state.labels);
@@ -165,6 +168,7 @@
     // --- Initialize ---
 
     function initialize() {
+        console.log('rewind: initializing...');
         return Bridge.callHost('getProjectPath').then(function(projectPath) {
             if (!projectPath) {
                 throw new Error('No project is currently open');
@@ -172,6 +176,7 @@
 
             state.projectPath = path.normalize(projectPath);
             state.projectDir = path.dirname(state.projectPath);
+            console.log('rewind: project path =', state.projectPath);
 
             // Migrate from .ppgit if needed
             migrateFromPpgit();
@@ -183,6 +188,7 @@
             // Create .rewind directory
             if (!fs.existsSync(state.vcDir)) {
                 fs.mkdirSync(state.vcDir, { recursive: true });
+                console.log('rewind: created', state.vcDir);
             }
 
             loadSettings();
@@ -190,12 +196,14 @@
             loadLabels();
 
             // Initialize git repo
+            console.log('rewind: initializing git repo...');
             return GitManager.init(state.repoPath);
         }).then(function() {
             // Detect current branch
             return GitManager.getCurrentBranch(state.repoPath);
         }).then(function(branch) {
             state.currentBranch = branch;
+            console.log('rewind: on branch', branch, '(' + getVersionDisplayName(branch) + ')');
             // Ensure branch has a display name
             if (!state.branches[branch]) {
                 state.branches[branch] = {
@@ -206,14 +214,17 @@
             }
             return GitManager.commitCount(state.repoPath);
         }).then(function(count) {
+            console.log('rewind: existing snapshots:', count);
             if (count > 0) {
                 return null;
             }
+            console.log('rewind: taking initial snapshot...');
             return doSnapshot('Initial snapshot');
         }).then(function() {
             state.initialized = true;
             setupDirtyPoll();
             startProjectPoll();
+            console.log('rewind: initialized successfully');
             emit('initialized', {
                 projectPath: state.projectPath,
                 branch: state.currentBranch,
@@ -227,25 +238,34 @@
 
     function doSnapshot(message) {
         if (state.operationInProgress) {
+            console.log('rewind: snapshot skipped (operation in progress)');
             return Promise.resolve(null);
         }
         state.operationInProgress = true;
+        console.log('rewind: snapshot starting -', message || 'Snapshot');
         return PrprojHandler.decompress(state.projectPath).then(function(xml) {
+            console.log('rewind: decompressed prproj (' + Math.round(xml.length / 1024) + 'KB XML)');
             return fs.promises.writeFile(state.xmlPath, xml, 'utf8');
         }).then(function() {
             return GitManager.hasChanges(state.repoPath);
         }).then(function(changed) {
             if (!changed) {
                 state.operationInProgress = false;
+                console.log('rewind: no changes detected, skipping commit');
                 return null;
             }
+            console.log('rewind: changes detected, committing...');
             return GitManager.commit(state.repoPath, message || 'Snapshot').then(function() {
                 state.lastSavedAt = new Date();
                 state.operationInProgress = false;
+                console.log('rewind: committed -', message || 'Snapshot');
                 emit('snapshot', { message: message });
                 // Auto-push to GitHub if enabled
                 if (state.settings.autoPush && window.GitHubManager && GitHubManager.isAuthenticated()) {
-                    GitHubManager.push(state.repoPath).catch(function(err) {
+                    console.log('rewind: auto-pushing to GitHub...');
+                    GitHubManager.push(state.repoPath).then(function() {
+                        console.log('rewind: auto-push complete');
+                    }).catch(function(err) {
                         console.warn('rewind: auto-push failed:', err.message);
                     });
                 }
@@ -253,16 +273,20 @@
             });
         }).catch(function(err) {
             state.operationInProgress = false;
+            console.error('rewind: snapshot failed:', err.message);
             throw err;
         });
     }
 
     function snapshot(message) {
         if (state.operationInProgress) {
+            console.log('rewind: manual snapshot skipped (operation in progress)');
             return Promise.resolve(null);
         }
         emit('busy', true);
+        console.log('rewind: saving project before snapshot...');
         return Bridge.callHost('saveProject').then(function() {
+            console.log('rewind: project saved, waiting 500ms...');
             return new Promise(function(r) { setTimeout(r, 500); });
         }).then(function() {
             return doSnapshot(message || 'Manual snapshot');
@@ -283,13 +307,16 @@
         }
         state.operationInProgress = true;
         emit('busy', true);
+        console.log('rewind: restoring to', commitHash.substring(0, 7), '...');
 
         var restoredXml;
         var savedProjectPath = state.projectPath;
 
+        // 1. Save + snapshot current state
         return Bridge.callHost('saveProject').then(function() {
             return new Promise(function(r) { setTimeout(r, 500); });
         }).then(function() {
+            console.log('rewind: decompressing current state...');
             return PrprojHandler.decompress(state.projectPath);
         }).then(function(xml) {
             return fs.promises.writeFile(state.xmlPath, xml, 'utf8').then(function() {
@@ -297,33 +324,62 @@
             });
         }).then(function(changed) {
             if (changed) {
+                console.log('rewind: committing current state before restore...');
                 return GitManager.commit(state.repoPath, 'Auto-save before restore');
             }
+        // 2. Checkout old version
         }).then(function() {
+            console.log('rewind: checking out', commitHash.substring(0, 7), '...');
             return GitManager.checkout(state.repoPath, commitHash);
+        // 3. Read restored XML
         }).then(function() {
             restoredXml = fs.readFileSync(state.xmlPath, 'utf8');
+            console.log('rewind: read restored XML (' + Math.round(restoredXml.length / 1024) + 'KB)');
+        // 4. Write restored .prproj
         }).then(function() {
+            console.log('rewind: compressing to .prproj...');
             return PrprojHandler.compress(restoredXml, state.projectPath);
+        // 5. Commit restored state
         }).then(function() {
             return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
+        // 6. Atomic close + reopen
         }).then(function() {
+            console.log('rewind: closing and reopening project...');
             return Bridge.callHost('closeAndReopenProject', { path: savedProjectPath });
         }).then(function() {
             state.initialized = true;
             state.operationInProgress = false;
             state.lastSavedAt = new Date();
             setupDirtyPoll();
+            console.log('rewind: restore complete');
             emit('restored', { hash: commitHash });
             emit('busy', false);
         }).catch(function(err) {
             state.operationInProgress = false;
             emit('busy', false);
+            console.error('rewind: restore failed:', err.message);
             throw err;
         });
     }
 
     // --- Branching (Versions) ---
+
+    /**
+     * Internal snapshot that doesn't check operationInProgress
+     */
+    function doSnapshotUnsafe(message) {
+        return PrprojHandler.decompress(state.projectPath).then(function(xml) {
+            return fs.promises.writeFile(state.xmlPath, xml, 'utf8');
+        }).then(function() {
+            return GitManager.hasChanges(state.repoPath);
+        }).then(function(changed) {
+            if (!changed) return null;
+            return GitManager.commit(state.repoPath, message || 'Snapshot').then(function() {
+                state.lastSavedAt = new Date();
+                return true;
+            });
+        });
+    }
 
     /**
      * Create a new version (branch) from current state
@@ -334,6 +390,7 @@
         }
         state.operationInProgress = true;
         emit('busy', true);
+        console.log('rewind: creating version "' + displayName + '"...');
 
         // Sanitize branch name for git
         var gitBranch = displayName
@@ -357,6 +414,7 @@
         }).then(function() {
             return doSnapshotUnsafe('Snapshot before creating "' + displayName + '"');
         }).then(function() {
+            console.log('rewind: creating git branch', gitBranch);
             return GitManager.createBranch(state.repoPath, gitBranch);
         }).then(function() {
             state.currentBranch = gitBranch;
@@ -366,31 +424,15 @@
             };
             saveBranches();
             state.operationInProgress = false;
+            console.log('rewind: version "' + displayName + '" created (branch: ' + gitBranch + ')');
             emit('version-created', { branch: gitBranch, displayName: displayName });
             emit('busy', false);
             return { branch: gitBranch, displayName: displayName };
         }).catch(function(err) {
             state.operationInProgress = false;
             emit('busy', false);
+            console.error('rewind: create version failed:', err.message);
             throw err;
-        });
-    }
-
-    /**
-     * Internal snapshot that doesn't check operationInProgress
-     * (used when we've already set it ourselves)
-     */
-    function doSnapshotUnsafe(message) {
-        return PrprojHandler.decompress(state.projectPath).then(function(xml) {
-            return fs.promises.writeFile(state.xmlPath, xml, 'utf8');
-        }).then(function() {
-            return GitManager.hasChanges(state.repoPath);
-        }).then(function(changed) {
-            if (!changed) return null;
-            return GitManager.commit(state.repoPath, message || 'Snapshot').then(function() {
-                state.lastSavedAt = new Date();
-                return true;
-            });
         });
     }
 
@@ -407,24 +449,32 @@
         state.operationInProgress = true;
         emit('busy', true);
 
+        var targetName = state.branches[gitBranch] ? state.branches[gitBranch].displayName : gitBranch;
+        console.log('rewind: switching to version "' + targetName + '" (branch: ' + gitBranch + ')...');
+
         var savedProjectPath = state.projectPath;
 
         // 1. Save current state
         return Bridge.callHost('saveProject').then(function() {
             return new Promise(function(r) { setTimeout(r, 500); });
         }).then(function() {
-            return doSnapshotUnsafe('Auto-save before switching to "' + (state.branches[gitBranch] ? state.branches[gitBranch].displayName : gitBranch) + '"');
+            console.log('rewind: saving current state...');
+            return doSnapshotUnsafe('Auto-save before switching to "' + targetName + '"');
         // 2. Switch git branch
         }).then(function() {
+            console.log('rewind: switching git branch to', gitBranch, '...');
             return GitManager.switchBranch(state.repoPath, gitBranch);
         // 3. Read restored XML
         }).then(function() {
+            console.log('rewind: reading XML from new branch...');
             return fs.promises.readFile(state.xmlPath, 'utf8');
         // 4. Write to .prproj
         }).then(function(xml) {
+            console.log('rewind: compressing to .prproj...');
             return PrprojHandler.compress(xml, state.projectPath);
         // 5. Atomic close + reopen
         }).then(function() {
+            console.log('rewind: closing and reopening project...');
             return Bridge.callHost('closeAndReopenProject', { path: savedProjectPath });
         }).then(function() {
             state.currentBranch = gitBranch;
@@ -432,6 +482,7 @@
             state.operationInProgress = false;
             state.lastSavedAt = new Date();
             setupDirtyPoll();
+            console.log('rewind: switched to version "' + targetName + '"');
             emit('version-switched', {
                 branch: gitBranch,
                 displayName: getVersionDisplayName()
@@ -440,13 +491,11 @@
         }).catch(function(err) {
             state.operationInProgress = false;
             emit('busy', false);
+            console.error('rewind: switch version failed:', err.message);
             throw err;
         });
     }
 
-    /**
-     * List all versions with display names
-     */
     function listVersions() {
         return GitManager.listBranches(state.repoPath).then(function(gitBranches) {
             return gitBranches.map(function(b) {
@@ -461,9 +510,6 @@
         });
     }
 
-    /**
-     * Delete a version (cannot delete current branch)
-     */
     function deleteVersion(gitBranch) {
         if (gitBranch === state.currentBranch) {
             return Promise.reject(new Error('Cannot delete the current version'));
@@ -471,9 +517,11 @@
         if (gitBranch === 'master') {
             return Promise.reject(new Error('Cannot delete the main version'));
         }
+        console.log('rewind: deleting version (branch: ' + gitBranch + ')...');
         return GitManager.deleteBranch(state.repoPath, gitBranch).then(function() {
             delete state.branches[gitBranch];
             saveBranches();
+            console.log('rewind: version deleted');
             emit('version-deleted', { branch: gitBranch });
         });
     }
@@ -493,25 +541,29 @@
 
     // --- Diffs ---
 
-    /**
-     * Get human-readable diff between two commits
-     */
     function getDiff(hashA, hashB) {
         if (!window.DiffEngine) {
+            console.warn('rewind: DiffEngine not available');
             return Promise.resolve({ totalChanges: 0, summary: 'Diff engine not available' });
         }
+        console.log('rewind: comparing', hashA.substring(0, 7), 'vs', hashB.substring(0, 7), '...');
         var xmlA, xmlB;
         return GitManager.showFile(state.repoPath, hashA, XML_FILENAME).then(function(xml) {
             xmlA = xml;
+            console.log('rewind: got XML for', hashA.substring(0, 7), xml ? '(' + Math.round(xml.length / 1024) + 'KB)' : '(null)');
             return GitManager.showFile(state.repoPath, hashB, XML_FILENAME);
         }).then(function(xml) {
             xmlB = xml;
+            console.log('rewind: got XML for', hashB.substring(0, 7), xml ? '(' + Math.round(xml.length / 1024) + 'KB)' : '(null)');
             if (!xmlA || !xmlB) {
                 return { totalChanges: 0, summary: 'Cannot compare versions' };
             }
-            return DiffEngine.compare(xmlA, xmlB);
-        }).catch(function() {
-            return { totalChanges: 0, summary: 'Diff failed' };
+            var result = DiffEngine.compare(xmlA, xmlB);
+            console.log('rewind: diff result -', result.totalChanges, 'changes,', result.sequences.length, 'sequences affected');
+            return result;
+        }).catch(function(err) {
+            console.error('rewind: diff failed:', err.message);
+            return { totalChanges: 0, summary: 'Diff failed: ' + err.message };
         });
     }
 
@@ -532,8 +584,12 @@
             state.dirtyTimer = null;
         }
         var seconds = state.settings.autoSaveIntervalSeconds;
-        if (!seconds || seconds <= 0 || !state.projectPath) return;
+        if (!seconds || seconds <= 0 || !state.projectPath) {
+            console.log('rewind: auto-save disabled');
+            return;
+        }
 
+        console.log('rewind: auto-save every', seconds, 'seconds');
         state.dirtyTimer = setInterval(function() {
             if (!state.initialized || state.operationInProgress) return;
 
@@ -542,7 +598,10 @@
             }).then(function() {
                 return doSnapshot('Auto-snapshot');
             }).then(function(committed) {
-                if (committed) emit('auto-snapshot', {});
+                if (committed) {
+                    console.log('rewind: auto-snapshot committed');
+                    emit('auto-snapshot', {});
+                }
             }).catch(function(err) {
                 console.error('rewind: auto-save failed:', err.message);
             });
@@ -553,6 +612,7 @@
 
     function startProjectPoll() {
         if (state.pollTimer) clearInterval(state.pollTimer);
+        console.log('rewind: project poll started (every', POLL_INTERVAL / 1000 + 's)');
 
         state.pollTimer = setInterval(function() {
             if (state.operationInProgress) return;
@@ -560,6 +620,7 @@
             Bridge.callHost('getProjectPath').then(function(currentPath) {
                 if (!currentPath) {
                     if (state.initialized) {
+                        console.log('rewind: project closed');
                         cleanup();
                         emit('project-closed', {});
                     }
@@ -567,10 +628,11 @@
                 }
                 currentPath = path.normalize(currentPath);
                 if (state.projectPath && currentPath !== state.projectPath) {
+                    console.log('rewind: project switched to', currentPath);
                     cleanup();
                     emit('project-switched', { newPath: currentPath });
                     initialize().catch(function(err) {
-                        console.error('Re-init for new project failed:', err.message);
+                        console.error('rewind: re-init for new project failed:', err.message);
                     });
                 }
             }).catch(function() {
@@ -585,6 +647,7 @@
         if (state.dirtyTimer) { clearInterval(state.dirtyTimer); state.dirtyTimer = null; }
         if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
         state.initialized = false;
+        console.log('rewind: cleaned up timers');
     }
 
     function destroy() {

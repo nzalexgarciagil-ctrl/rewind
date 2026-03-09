@@ -8,11 +8,12 @@
     var toggleBtn = null;
     var isVisible = false;
     var MAX_ENTRIES = 500;
+    var logBuffer = []; // Keep text copies for copy-to-clipboard
 
     function initialize() {
         startLogListener();
         createConsoleUI();
-        addLogEntry('info', ['Debug Console initialized']);
+        addLogEntry('info', ['Rewind debug console ready']);
     }
 
     /**
@@ -30,20 +31,27 @@
 
         console.log = function() {
             window._originalConsole.log.apply(console, arguments);
-            addLogEntry('log', Array.from(arguments));
+            addLogEntry('log', toArray(arguments));
         };
         console.error = function() {
             window._originalConsole.error.apply(console, arguments);
-            addLogEntry('error', Array.from(arguments));
+            addLogEntry('error', toArray(arguments));
         };
         console.warn = function() {
             window._originalConsole.warn.apply(console, arguments);
-            addLogEntry('warn', Array.from(arguments));
+            addLogEntry('warn', toArray(arguments));
         };
         console.info = function() {
             window._originalConsole.info.apply(console, arguments);
-            addLogEntry('info', Array.from(arguments));
+            addLogEntry('info', toArray(arguments));
         };
+    }
+
+    // Array.from fallback for older CEP Chromium
+    function toArray(args) {
+        var arr = [];
+        for (var i = 0; i < args.length; i++) arr.push(args[i]);
+        return arr;
     }
 
     /**
@@ -78,6 +86,10 @@
         var btns = document.createElement('div');
         btns.className = 'debug-console-btns';
 
+        var copyBtn = document.createElement('button');
+        copyBtn.textContent = 'Copy All';
+        copyBtn.addEventListener('click', copyAll);
+
         var clearBtn = document.createElement('button');
         clearBtn.textContent = 'Clear';
         clearBtn.addEventListener('click', clear);
@@ -86,6 +98,7 @@
         closeBtn.textContent = 'Close';
         closeBtn.addEventListener('click', hide);
 
+        btns.appendChild(copyBtn);
         btns.appendChild(clearBtn);
         btns.appendChild(closeBtn);
         header.appendChild(title);
@@ -114,15 +127,8 @@
     function addLogEntry(level, args) {
         if (!logContainer) return;
 
-        var entry = document.createElement('div');
-        entry.className = 'debug-log-entry debug-log-' + level;
-
-        var timestamp = document.createElement('span');
-        timestamp.className = 'debug-log-timestamp';
-        timestamp.textContent = new Date().toLocaleTimeString();
-
-        var content = document.createElement('span');
-        content.className = 'debug-log-content';
+        var now = new Date();
+        var timeStr = now.toLocaleTimeString();
 
         var text = args.map(function(arg) {
             if (typeof arg === 'object') {
@@ -135,6 +141,19 @@
             return String(arg);
         }).join(' ');
 
+        // Store in buffer for copy
+        logBuffer.push('[' + timeStr + '] [' + level.toUpperCase() + '] ' + text);
+        if (logBuffer.length > MAX_ENTRIES) logBuffer.shift();
+
+        var entry = document.createElement('div');
+        entry.className = 'debug-log-entry debug-log-' + level;
+
+        var timestamp = document.createElement('span');
+        timestamp.className = 'debug-log-timestamp';
+        timestamp.textContent = timeStr;
+
+        var content = document.createElement('span');
+        content.className = 'debug-log-content';
         content.textContent = text;
 
         entry.appendChild(timestamp);
@@ -148,6 +167,48 @@
         var entries = logContainer.querySelectorAll('.debug-log-entry');
         if (entries.length > MAX_ENTRIES) {
             entries[0].remove();
+        }
+    }
+
+    function copyAll() {
+        var text = logBuffer.join('\n');
+        if (!text) {
+            text = '(no logs)';
+        }
+        // Try clipboard API, fall back to textarea hack
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                flashCopyFeedback();
+            }).catch(function() {
+                fallbackCopy(text);
+            });
+        } else {
+            fallbackCopy(text);
+        }
+    }
+
+    function fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy');
+            flashCopyFeedback();
+        } catch (e) {
+            window._originalConsole.error('Copy failed:', e);
+        }
+        document.body.removeChild(ta);
+    }
+
+    function flashCopyFeedback() {
+        var btns = consoleContainer.querySelectorAll('.debug-console-btns button');
+        if (btns[0]) {
+            var original = btns[0].textContent;
+            btns[0].textContent = 'Copied!';
+            setTimeout(function() { btns[0].textContent = original; }, 1500);
         }
     }
 
@@ -167,6 +228,7 @@
 
     function clear() {
         if (logContainer) logContainer.innerHTML = '';
+        logBuffer.length = 0;
     }
 
     window.DebugConsole = {
