@@ -1,21 +1,22 @@
-// app.js - UI controller for ppgit
+// app.js - UI controller for Rewind
 
 (function() {
     'use strict';
 
-    // DOM references
     var els = {};
     var historyItems = [];
     var historyOffset = 0;
     var PAGE_SIZE = 20;
     var toastTimer = null;
+    var savedTimer = null;
+    var versionDropdownOpen = false;
+    var pendingDeleteBranch = null;
 
     function init() {
-        // Initialize debug console first so all subsequent logs are captured
         if (window.DebugConsole) {
             DebugConsole.initialize();
         }
-        console.log('ppgit: panel loaded');
+        console.log('rewind: panel loaded');
         cacheElements();
         bindEvents();
         listenToVC();
@@ -48,7 +49,7 @@
         els.settingsCancel = document.getElementById('settings-cancel');
         els.toast = document.getElementById('toast');
 
-        // GitHub elements
+        // GitHub
         els.githubBtn = document.getElementById('github-btn');
         els.githubPanel = document.getElementById('github-panel');
         els.githubToken = document.getElementById('github-token');
@@ -58,6 +59,32 @@
         els.githubUsername = document.getElementById('github-username');
         els.githubSyncBtn = document.getElementById('github-sync-btn');
         els.githubLogoutBtn = document.getElementById('github-logout-btn');
+
+        // Version selector
+        els.versionDropdownBtn = document.getElementById('version-dropdown-btn');
+        els.currentVersionName = document.getElementById('current-version-name');
+        els.versionDropdown = document.getElementById('version-dropdown');
+        els.versionList = document.getElementById('version-list');
+        els.newVersionBtn = document.getElementById('new-version-btn');
+        els.statusSaved = document.getElementById('status-saved');
+
+        // Version modal
+        els.versionModal = document.getElementById('version-modal');
+        els.versionNameInput = document.getElementById('version-name-input');
+        els.versionCreate = document.getElementById('version-create');
+        els.versionCancel = document.getElementById('version-cancel');
+
+        // Delete version modal
+        els.deleteVersionModal = document.getElementById('delete-version-modal');
+        els.deleteVersionText = document.getElementById('delete-version-text');
+        els.deleteVersionYes = document.getElementById('delete-version-yes');
+        els.deleteVersionNo = document.getElementById('delete-version-no');
+
+        // Diff modal
+        els.diffModal = document.getElementById('diff-modal');
+        els.diffModalTitle = document.getElementById('diff-modal-title');
+        els.diffContent = document.getElementById('diff-content');
+        els.diffClose = document.getElementById('diff-close');
     }
 
     function bindEvents() {
@@ -72,7 +99,7 @@
         els.confirmNo.addEventListener('click', function() { hideModal(els.confirmModal); });
         els.loadMoreBtn.addEventListener('click', loadMoreHistory);
 
-        // GitHub events
+        // GitHub
         els.githubBtn.addEventListener('click', toggleGitHubPanel);
         els.githubConnectBtn.addEventListener('click', handleGitHubConnect);
         els.githubToken.addEventListener('keydown', function(e) {
@@ -81,11 +108,35 @@
         els.githubSyncBtn.addEventListener('click', handleGitHubSync);
         els.githubLogoutBtn.addEventListener('click', handleGitHubLogout);
 
+        // Version selector
+        els.versionDropdownBtn.addEventListener('click', toggleVersionDropdown);
+        els.newVersionBtn.addEventListener('click', openNewVersionModal);
+        els.versionCreate.addEventListener('click', handleCreateVersion);
+        els.versionCancel.addEventListener('click', function() { hideModal(els.versionModal); });
+        els.versionNameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') handleCreateVersion();
+        });
+
+        // Delete version
+        els.deleteVersionNo.addEventListener('click', function() { hideModal(els.deleteVersionModal); });
+        els.deleteVersionYes.addEventListener('click', handleDeleteVersion);
+
+        // Diff
+        els.diffClose.addEventListener('click', function() { hideModal(els.diffModal); });
+
         // Close modals on overlay click
-        [els.settingsModal, els.confirmModal].forEach(function(modal) {
+        var modals = [els.settingsModal, els.confirmModal, els.versionModal, els.deleteVersionModal, els.diffModal];
+        modals.forEach(function(modal) {
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) hideModal(modal);
             });
+        });
+
+        // Close version dropdown on outside click
+        document.addEventListener('click', function(e) {
+            if (versionDropdownOpen && !els.versionDropdownBtn.contains(e.target) && !els.versionDropdown.contains(e.target)) {
+                closeVersionDropdown();
+            }
         });
     }
 
@@ -96,9 +147,9 @@
                     showMainPanel();
                     setStatus('active');
                     showProjectPath(data.projectPath);
+                    updateVersionName(data.version || 'Main Edit');
                     refreshHistory();
                     showToast('Tracking initialized', 'success');
-                    // Auto-setup GitHub remote if connected
                     if (window.GitHubManager && GitHubManager.isAuthenticated()) {
                         setupGitHubRemote();
                     }
@@ -106,12 +157,14 @@
                 case 'snapshot':
                 case 'auto-snapshot':
                     refreshHistory();
+                    updateSavedTime();
                     if (event === 'auto-snapshot') {
                         showToast('Auto-snapshot saved');
                     }
                     break;
                 case 'restored':
                     refreshHistory();
+                    updateSavedTime();
                     showToast('Restored to ' + data.hash.substring(0, 7), 'success');
                     break;
                 case 'busy':
@@ -126,6 +179,23 @@
                 case 'project-switched':
                     showToast('Project switched, re-initializing...');
                     break;
+                case 'version-created':
+                    updateVersionName(data.displayName);
+                    refreshHistory();
+                    showToast('Version "' + data.displayName + '" created', 'success');
+                    break;
+                case 'version-switched':
+                    updateVersionName(data.displayName);
+                    refreshHistory();
+                    updateSavedTime();
+                    showToast('Switched to "' + data.displayName + '"', 'success');
+                    break;
+                case 'version-deleted':
+                    showToast('Version deleted');
+                    break;
+                case 'labels-changed':
+                    refreshHistory();
+                    break;
                 case 'settings-changed':
                     break;
             }
@@ -135,11 +205,10 @@
     function checkProject() {
         Bridge.callHost('getProjectPath').then(function(projectPath) {
             if (projectPath) {
-                // Check if already tracked
                 var path = cep_node.require('path');
                 var fs = cep_node.require('fs');
                 var dir = path.dirname(path.normalize(projectPath));
-                if (fs.existsSync(path.join(dir, '.ppgit'))) {
+                if (fs.existsSync(path.join(dir, '.rewind')) || fs.existsSync(path.join(dir, '.ppgit'))) {
                     handleInit();
                     return;
                 }
@@ -152,6 +221,8 @@
             showInitPanel();
         });
     }
+
+    // --- Core actions ---
 
     function handleInit() {
         els.initBtn.disabled = true;
@@ -167,10 +238,19 @@
 
     function handleSnapshot() {
         var msg = els.snapshotInput.value.trim();
+        var label = msg; // Use the same message as the label if provided
         els.snapshotBtn.disabled = true;
         VersionController.snapshot(msg || undefined).then(function(committed) {
             els.snapshotInput.value = '';
             if (committed) {
+                // If user typed a message, also save it as a label
+                if (label) {
+                    VersionController.getHistory(1).then(function(commits) {
+                        if (commits.length > 0) {
+                            VersionController.addLabel(commits[0].hash, label);
+                        }
+                    });
+                }
                 showToast('Snapshot saved', 'success');
             } else {
                 showToast('No changes detected');
@@ -210,6 +290,104 @@
         els.confirmNo.addEventListener('click', cancelHandler);
     }
 
+    // --- Version (Branch) Management ---
+
+    function toggleVersionDropdown() {
+        if (versionDropdownOpen) {
+            closeVersionDropdown();
+        } else {
+            openVersionDropdown();
+        }
+    }
+
+    function openVersionDropdown() {
+        VersionController.listVersions().then(function(versions) {
+            els.versionList.innerHTML = '';
+            versions.forEach(function(v) {
+                var opt = document.createElement('div');
+                opt.className = 'version-option' + (v.current ? ' active' : '');
+
+                var nameSpan = document.createElement('span');
+                nameSpan.className = 'version-option-name';
+                nameSpan.textContent = v.displayName;
+                opt.appendChild(nameSpan);
+
+                // Delete button (not on current or master)
+                if (!v.current && v.branch !== 'master') {
+                    var delBtn = document.createElement('button');
+                    delBtn.className = 'version-delete-btn';
+                    delBtn.innerHTML = '&#10005;';
+                    delBtn.title = 'Delete version';
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        closeVersionDropdown();
+                        confirmDeleteVersion(v.branch, v.displayName);
+                    });
+                    opt.appendChild(delBtn);
+                }
+
+                if (!v.current) {
+                    opt.addEventListener('click', function() {
+                        closeVersionDropdown();
+                        VersionController.switchVersion(v.branch).catch(function(err) {
+                            showToast('Switch failed: ' + err.message, 'error');
+                        });
+                    });
+                }
+
+                els.versionList.appendChild(opt);
+            });
+            els.versionDropdown.style.display = 'block';
+            versionDropdownOpen = true;
+        });
+    }
+
+    function closeVersionDropdown() {
+        els.versionDropdown.style.display = 'none';
+        versionDropdownOpen = false;
+    }
+
+    function openNewVersionModal() {
+        closeVersionDropdown();
+        els.versionNameInput.value = '';
+        showModal(els.versionModal);
+        setTimeout(function() { els.versionNameInput.focus(); }, 100);
+    }
+
+    function handleCreateVersion() {
+        var name = els.versionNameInput.value.trim();
+        if (!name) {
+            showToast('Please enter a version name', 'error');
+            return;
+        }
+        hideModal(els.versionModal);
+        VersionController.createVersion(name).catch(function(err) {
+            showToast('Create failed: ' + err.message, 'error');
+        });
+    }
+
+    function confirmDeleteVersion(branch, displayName) {
+        pendingDeleteBranch = branch;
+        els.deleteVersionText.textContent = 'Delete "' + displayName + '"? This will permanently remove this version and all its snapshots.';
+        showModal(els.deleteVersionModal);
+    }
+
+    function handleDeleteVersion() {
+        hideModal(els.deleteVersionModal);
+        if (!pendingDeleteBranch) return;
+        var branch = pendingDeleteBranch;
+        pendingDeleteBranch = null;
+        VersionController.deleteVersion(branch).catch(function(err) {
+            showToast('Delete failed: ' + err.message, 'error');
+        });
+    }
+
+    function updateVersionName(name) {
+        els.currentVersionName.textContent = name || 'Main Edit';
+    }
+
+    // --- History ---
+
     function refreshHistory() {
         historyOffset = 0;
         VersionController.getHistory(PAGE_SIZE + 1).then(function(commits) {
@@ -233,6 +411,7 @@
     }
 
     function renderTimeline(commits) {
+        var labels = VersionController.getLabels();
         els.timeline.innerHTML = '';
         if (commits.length === 0) {
             els.emptyState.style.display = 'block';
@@ -244,6 +423,7 @@
             var item = document.createElement('div');
             item.className = 'commit-item';
 
+            // Dot column
             var dotCol = document.createElement('div');
             dotCol.className = 'commit-dot-col';
             var dot = document.createElement('div');
@@ -255,21 +435,59 @@
                 dotCol.appendChild(line);
             }
 
+            // Info column
             var info = document.createElement('div');
             info.className = 'commit-info';
+
             var msg = document.createElement('div');
             msg.className = 'commit-message';
             msg.textContent = commit.message;
             msg.title = commit.message;
+            info.appendChild(msg);
+
+            // Label
+            var label = labels[commit.hash];
+            var labelEl = document.createElement('span');
+            labelEl.className = 'commit-label' + (label ? '' : ' empty');
+            labelEl.textContent = label || '+ label';
+            labelEl.title = label ? 'Click to edit label' : 'Click to add label';
+            labelEl.addEventListener('click', (function(hash, currentLabel) {
+                return function() {
+                    var newLabel = prompt('Snapshot label:', currentLabel || '');
+                    if (newLabel !== null) {
+                        VersionController.addLabel(hash, newLabel);
+                    }
+                };
+            })(commit.hash, label));
+            info.appendChild(labelEl);
+
+            // Meta row
             var meta = document.createElement('div');
             meta.className = 'commit-meta';
-            meta.innerHTML = '<span class="commit-hash">' + escapeHtml(commit.hash.substring(0, 7)) + '</span> &middot; ' + escapeHtml(commit.dateRelative);
-            info.appendChild(msg);
+            var hashSpan = document.createElement('span');
+            hashSpan.className = 'commit-hash';
+            hashSpan.textContent = commit.hash.substring(0, 7);
+            meta.appendChild(hashSpan);
+            meta.appendChild(document.createTextNode(' \u00B7 ' + commit.dateRelative));
+
+            // Diff link (compare with previous commit)
+            if (i < commits.length - 1) {
+                var diffLink = document.createElement('span');
+                diffLink.className = 'commit-diff-link';
+                diffLink.textContent = 'diff';
+                diffLink.addEventListener('click', (function(hashNew, hashOld) {
+                    return function() { showDiff(hashNew, hashOld); };
+                })(commit.hash, commits[i + 1].hash));
+                meta.appendChild(document.createTextNode(' \u00B7 '));
+                meta.appendChild(diffLink);
+            }
+
             info.appendChild(meta);
 
+            // Actions
             var actions = document.createElement('div');
             actions.className = 'commit-actions';
-            if (i > 0) { // Don't show restore for the latest commit
+            if (i > 0) {
                 var btn = document.createElement('button');
                 btn.className = 'restore-btn';
                 btn.textContent = 'Restore';
@@ -286,6 +504,46 @@
         });
     }
 
+    // --- Diffs ---
+
+    function showDiff(hashNew, hashOld) {
+        els.diffContent.textContent = 'Comparing...';
+        els.diffModalTitle.textContent = 'Changes';
+        showModal(els.diffModal);
+
+        VersionController.getDiff(hashOld, hashNew).then(function(result) {
+            if (!result || result.totalChanges === 0) {
+                els.diffContent.innerHTML = '<div class="diff-summary-text">No meaningful changes detected</div>';
+                return;
+            }
+
+            var html = '';
+            if (result.sequences && result.sequences.length > 0) {
+                result.sequences.forEach(function(s) {
+                    var cssClass = s.status === 'added' ? 'added' : s.status === 'removed' ? 'removed' : 'modified';
+                    var desc = '';
+                    if (s.status === 'added') desc = 'Added';
+                    else if (s.status === 'removed') desc = 'Removed';
+                    else desc = s.changes + ' changes';
+                    html += '<div class="diff-item ' + cssClass + '">';
+                    html += '<strong>' + escapeHtml(s.name) + '</strong>: ' + desc;
+                    html += '</div>';
+                });
+            }
+            if (result.projectSettings && result.projectSettings.changed) {
+                html += '<div class="diff-item modified">';
+                html += result.projectSettings.count + ' project setting changes';
+                html += '</div>';
+            }
+            if (!html) {
+                html = '<div class="diff-summary-text">' + escapeHtml(result.summary) + '</div>';
+            }
+            els.diffContent.innerHTML = html;
+        }).catch(function(err) {
+            els.diffContent.textContent = 'Diff failed: ' + err.message;
+        });
+    }
+
     // --- GitHub ---
 
     function checkGitHub() {
@@ -296,7 +554,6 @@
 
     function toggleGitHubPanel() {
         if (GitHubManager.isAuthenticated()) {
-            // Toggle info bar
             var vis = els.githubInfo.style.display;
             els.githubInfo.style.display = vis === 'none' ? 'block' : 'none';
             els.githubPanel.style.display = 'none';
@@ -319,7 +576,6 @@
             showGitHubConnected();
             els.githubPanel.style.display = 'none';
             els.githubToken.value = '';
-            // Auto-setup remote for current project if tracking
             var vcState = VersionController.getState();
             if (vcState.initialized) {
                 setupGitHubRemote();
@@ -354,7 +610,7 @@
                 token
             );
         }).catch(function(err) {
-            console.error('ppgit: GitHub remote setup failed:', err.message);
+            console.error('rewind: GitHub remote setup failed:', err.message);
         });
     }
 
@@ -369,7 +625,6 @@
             return;
         }
 
-        // Ensure remote is set up, then sync
         setupGitHubRemote().then(function() {
             return GitHubManager.sync(repoPath);
         }).then(function() {
@@ -390,7 +645,8 @@
         showToast('Disconnected from GitHub');
     }
 
-    // Settings
+    // --- Settings ---
+
     function openSettings() {
         var s = VersionController.getSettings();
         els.intervalSelect.value = String(s.autoSaveIntervalSeconds);
@@ -407,7 +663,8 @@
         showToast('Settings saved', 'success');
     }
 
-    // UI helpers
+    // --- UI Helpers ---
+
     function showMainPanel() {
         els.initPanel.style.display = 'none';
         els.mainPanel.style.display = 'flex';
@@ -431,6 +688,22 @@
         els.projectInfo.title = p;
     }
 
+    function updateSavedTime() {
+        if (savedTimer) clearInterval(savedTimer);
+        var savedAt = new Date();
+
+        function update() {
+            var diff = Math.floor((Date.now() - savedAt.getTime()) / 1000);
+            if (diff < 5) els.statusSaved.textContent = 'saved just now';
+            else if (diff < 60) els.statusSaved.textContent = 'saved ' + diff + 's ago';
+            else if (diff < 3600) els.statusSaved.textContent = 'saved ' + Math.floor(diff / 60) + 'm ago';
+            else els.statusSaved.textContent = 'saved ' + Math.floor(diff / 3600) + 'h ago';
+        }
+
+        update();
+        savedTimer = setInterval(update, 10000);
+    }
+
     function showModal(el) {
         el.classList.add('visible');
     }
@@ -443,7 +716,6 @@
         clearTimeout(toastTimer);
         els.toast.textContent = msg;
         els.toast.className = 'toast' + (type ? ' ' + type : '');
-        // Force reflow
         void els.toast.offsetWidth;
         els.toast.classList.add('show');
         toastTimer = setTimeout(function() {

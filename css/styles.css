@@ -1,4 +1,4 @@
-/* ppgit - Dark theme matching Premiere Pro */
+/* Rewind - Dark theme matching Premiere Pro */
 
 * {
     margin: 0;
@@ -94,6 +94,163 @@ body {
 .icon-btn:hover {
     color: #E0E0E0;
     background: #333;
+}
+
+/* ---- VERSION BAR ---- */
+.version-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #222;
+    border-bottom: 1px solid #2A2A2A;
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.version-selector-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.version-dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #2A2A2A;
+    border: 1px solid #444;
+    color: #DDD;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    max-width: 160px;
+}
+.version-dropdown-btn:hover {
+    border-color: #4A90D9;
+    background: #333;
+}
+
+.version-dropdown-btn span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dropdown-arrow {
+    font-size: 10px;
+    color: #888;
+    flex-shrink: 0;
+}
+
+.version-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: #2A2A2A;
+    border: 1px solid #444;
+    border-radius: 4px;
+    min-width: 180px;
+    max-width: 260px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+    z-index: 50;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.version-list {
+    padding: 4px 0;
+}
+
+.version-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 11px;
+    color: #CCC;
+    gap: 6px;
+}
+.version-option:hover {
+    background: #333;
+}
+.version-option.active {
+    color: #4A90D9;
+    font-weight: 600;
+}
+.version-option.active::before {
+    content: '\2713';
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+.version-option-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.version-delete-btn {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+    line-height: 1;
+    transition: color 0.15s;
+    flex-shrink: 0;
+    visibility: hidden;
+}
+.version-option:hover .version-delete-btn {
+    visibility: visible;
+}
+.version-delete-btn:hover {
+    color: #F44336;
+}
+
+.version-dropdown-divider {
+    height: 1px;
+    background: #444;
+    margin: 2px 0;
+}
+
+.new-version-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    color: #4A90D9;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.new-version-option:hover {
+    background: #333;
+}
+
+.version-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.status-saved {
+    font-size: 10px;
+    color: #555;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* ---- GITHUB ---- */
@@ -214,7 +371,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 12px;
     padding: 20px;
 }
 
@@ -227,6 +384,12 @@ body {
     text-align: center;
     color: #888;
     line-height: 1.5;
+}
+
+.init-subtitle {
+    font-size: 11px;
+    color: #666 !important;
+    margin-top: -4px;
 }
 
 /* ---- TIMELINE ---- */
@@ -295,15 +458,55 @@ body {
     text-overflow: ellipsis;
 }
 
+.commit-label {
+    display: inline-block;
+    font-size: 10px;
+    color: #D4A017;
+    background: rgba(212, 160, 23, 0.12);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-top: 3px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.commit-label:hover {
+    background: rgba(212, 160, 23, 0.22);
+}
+.commit-label.empty {
+    color: #555;
+    background: none;
+    border: 1px dashed #444;
+}
+.commit-label.empty:hover {
+    border-color: #666;
+    color: #777;
+}
+
 .commit-meta {
     font-size: 10px;
     color: #777;
     margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .commit-hash {
     font-family: 'Consolas', monospace;
     color: #666;
+}
+
+.commit-diff-link {
+    color: #4A90D9;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.commit-diff-link:hover {
+    color: #6BB5FF;
 }
 
 .commit-actions {
@@ -313,6 +516,7 @@ body {
     padding-left: 6px;
     display: flex;
     align-items: center;
+    gap: 4px;
 }
 .commit-item:hover .commit-actions {
     opacity: 1;
@@ -439,10 +643,10 @@ body {
 .project-info {
     font-size: 10px;
     color: #666;
-    padding: 4px 12px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
 }
 
 /* ---- MODAL OVERLAY ---- */
@@ -472,11 +676,40 @@ body {
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 
+.modal-wide {
+    width: 320px;
+}
+
 .modal-title {
     font-size: 13px;
     font-weight: 600;
     color: #E0E0E0;
     margin-bottom: 14px;
+}
+
+.modal-desc {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.4;
+    margin-bottom: 12px;
+}
+
+.modal-input {
+    width: 100%;
+    background: #1E1E1E;
+    border: 1px solid #444;
+    color: #CCC;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.modal-input:focus {
+    border-color: #4A90D9;
+}
+.modal-input::placeholder {
+    color: #555;
 }
 
 .modal-row {
@@ -561,6 +794,12 @@ body {
 .modal-btn.primary:hover {
     background: #5BA0E9;
 }
+.modal-btn.primary.danger {
+    background: #D32F2F;
+}
+.modal-btn.primary.danger:hover {
+    background: #E53935;
+}
 .modal-btn.secondary {
     background: #444;
     color: #CCC;
@@ -578,6 +817,46 @@ body {
     color: #BBB;
     line-height: 1.5;
     margin-bottom: 16px;
+}
+
+/* ---- DIFF CONTENT ---- */
+.diff-content {
+    font-size: 11px;
+    color: #BBB;
+    line-height: 1.6;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 8px 0;
+}
+
+.diff-section {
+    margin-bottom: 8px;
+}
+
+.diff-section-title {
+    font-weight: 600;
+    color: #DDD;
+    margin-bottom: 4px;
+}
+
+.diff-item {
+    padding-left: 10px;
+    color: #AAA;
+}
+
+.diff-item.added {
+    color: #81C784;
+}
+.diff-item.removed {
+    color: #E57373;
+}
+.diff-item.modified {
+    color: #64B5F6;
+}
+
+.diff-summary-text {
+    color: #888;
+    font-style: italic;
 }
 
 /* ---- TOAST ---- */

@@ -1,18 +1,19 @@
 {
-  "name": "ppgit",
-  "version": "1.0.0",
-  "description": "Git-based version control for Premiere Pro projects with GitHub backup",
-  "author": "ppgit contributors",
+  "name": "rewind",
+  "version": "1.1.0",
+  "description": "Full version history for every Premiere Pro project — branching, labels, one-click restore, and GitHub backup",
+  "author": "Rewind contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ppgit/ppgit"
+    "url": "https://github.com/nzalexgarciagil-ctrl/premiere-git.git"
   },
   "keywords": [
     "premiere-pro",
-    "git",
     "version-control",
+    "git",
     "adobe",
-    "cep"
+    "cep",
+    "rewind"
   ]
 }

@@ -1,26 +1,51 @@
-# ppgit - Git Version Control for Premiere Pro
+# Rewind
 
-**Never lose your Premiere Pro project again.** ppgit automatically saves every change you make as a git snapshot, with one-click restore and GitHub backup.
+### Stop naming your projects _FINAL_FINAL2.prproj
 
-## What it does
+Full version history for every Premiere Pro project. Browse, restore, and manage every change you've ever made — without cluttering your desktop with duplicate files.
 
-- **Auto-saves on every edit** - Cut a clip, adjust a title, move anything - ppgit detects the change and snapshots it within seconds
-- **One-click restore** - Browse your version timeline and restore any previous state instantly
-- **GitHub backup** - Connect your GitHub account and every snapshot is automatically backed up to a private repository
-- **Per-project tracking** - Each Premiere Pro project gets its own isolated version history
-- **Zero config** - Click "Start Tracking" and you're done
+---
 
-## How it works
+## The problem
 
-Premiere Pro project files (`.prproj`) are compressed XML. ppgit decompresses them and tracks the XML in a local git repository, giving you meaningful version diffs and efficient storage. Only the actual changes are stored, not full copies.
+You know the drill:
 
-```
-Your edit in Premiere Pro
-    -> ppgit detects the .prproj file change
-    -> Decompresses to readable XML
-    -> Commits the diff to a local git repo
-    -> (Optional) Pushes to your private GitHub repo
-```
+- Client asks for an alternate cut. You duplicate the sequence. Then duplicate it again. Your project is a graveyard of `Sequence_v2_OLD_USE_THIS_ONE`.
+- You save over something, close Premiere, and your undo history is gone forever.
+- Your desktop looks like `MyProject_FINAL.prproj`, `MyProject_FINAL2.prproj`, `MyProject_FINAL_forreal.prproj`.
+- A week later, you can't remember what changed between any of them.
+
+Rewind fixes all of this.
+
+## What Rewind does
+
+**Rewind is version control for creative projects.** It gives you a complete, browsable history of every change you make in Premiere Pro, with the ability to restore any previous state in one click.
+
+### Automatic version history
+
+Rewind silently saves your project every minute in the background. Every save becomes a snapshot you can browse and restore. You don't have to remember to save, duplicate, or rename anything.
+
+### Named versions
+
+Create named versions like **Rough Cut**, **Client Alt**, and **Director's Cut**. Switch between them instantly. Each version has its own complete history, so you can experiment freely without losing anything.
+
+### One-click restore
+
+Browse your timeline of snapshots, click **Restore**, and your project reopens at that exact state. No digging through folders, no guessing which file is which.
+
+### Change summaries
+
+See what actually changed between any two snapshots — which sequences were modified, which clips were added or removed. No more opening two files side-by-side and squinting.
+
+### GitHub backup
+
+Connect your GitHub account and every snapshot is automatically backed up to a private repo. Your version history lives in the cloud, safe from drive failures.
+
+### Per-project isolation
+
+Each project has its own history. Nothing is shared, nothing leaks between projects.
+
+---
 
 ## Installation
 
@@ -34,9 +59,9 @@ Your edit in Premiere Pro
 #### Windows
 
 1. Download or clone this repository
-2. Copy the `ppgit` folder to:
+2. Copy the folder to:
    ```
-   C:\Users\<YourUsername>\AppData\Roaming\Adobe\CEP\extensions\ppgit
+   C:\Users\<YourUsername>\AppData\Roaming\Adobe\CEP\extensions\rewind
    ```
 3. Enable unsigned extensions (required for development builds):
    - Open Registry Editor (`regedit`)
@@ -44,104 +69,125 @@ Your edit in Premiere Pro
    - Create a new String value: `PlayerDebugMode` = `1`
    - If the `CSXS.11` key doesn't exist, create it
 4. Restart Premiere Pro
-5. Go to **Window > Extensions > ppgit**
+5. Go to **Window > Extensions > Rewind**
 
 #### macOS
 
 1. Download or clone this repository
-2. Copy the `ppgit` folder to:
+2. Copy the folder to:
    ```
-   ~/Library/Application Support/Adobe/CEP/extensions/ppgit
+   ~/Library/Application Support/Adobe/CEP/extensions/rewind
    ```
 3. Enable unsigned extensions:
    ```bash
    defaults write com.adobe.CSXS.11 PlayerDebugMode 1
    ```
 4. Restart Premiere Pro
-5. Go to **Window > Extensions > ppgit**
+5. Go to **Window > Extensions > Rewind**
+
+---
 
 ## Usage
 
 ### Getting started
 
 1. Open a Premiere Pro project
-2. Open the ppgit panel (**Window > Extensions > ppgit**)
+2. Open the Rewind panel: **Window > Extensions > Rewind**
 3. Click **Start Tracking**
-4. That's it - ppgit is now watching your project
+4. Make your edits — Rewind auto-saves every minute in the background
 
-### Taking snapshots
+### Creating named versions
 
-- **Automatic**: Every time you save your project (Ctrl+S), ppgit captures a snapshot
-- **Manual**: Type an optional message and click **Snapshot**
-- **Interval**: Set auto-snapshots every 5-60 minutes in Settings
+1. Click **New Version** in the Rewind panel
+2. Give it a name (e.g., "Rough Cut", "Client Feedback v1")
+3. Keep editing — this version now has its own history
 
-### Restoring a version
+### Switching versions
 
-1. Browse the timeline in the ppgit panel
-2. Hover over any snapshot and click **Restore**
-3. Confirm the restore - your current state is saved first as a safety net
-4. Premiere Pro closes and reopens with the restored version
+Click the version name in the dropdown to switch. Your project reopens in the selected version, exactly where you left off.
 
-### GitHub backup
+### Restoring a snapshot
 
-1. Click the cloud icon in the ppgit header
-2. Paste your GitHub Personal Access Token ([create one here](https://github.com/settings/tokens/new?scopes=repo&description=ppgit))
+1. Browse the timeline in the Rewind panel
+2. Hover over any snapshot
+3. Click **Restore**
+4. Your project closes and reopens at that exact state
+
+### Connecting GitHub backup
+
+1. Click the cloud icon in the Rewind header
+2. Paste your GitHub Personal Access Token ([create one here](https://github.com/settings/tokens/new?scopes=repo&description=rewind))
 3. Click **Connect**
-4. ppgit automatically creates a private repo and syncs your snapshots
+4. Every snapshot is now automatically backed up to a private repo
+
+---
 
 ## Settings
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Auto-snapshot on save | Capture a snapshot when the .prproj file changes | On |
-| Auto-snapshot interval | Take snapshots at regular intervals | Off |
-| Auto-sync to GitHub | Push to GitHub after each snapshot | Off |
+| Setting | Options | Default |
+|---------|---------|---------|
+| Auto-save interval | 30s / 1 min / 2 min / 5 min / Off | 1 min |
+| Auto-sync to GitHub | On / Off | Off |
 
-## How data is stored
+---
+
+## FAQ
+
+**Does this slow down Premiere Pro?**
+No. Rewind runs in a separate panel process. Your editing performance is not affected.
+
+**How much disk space does it use?**
+Very little. Rewind only stores the differences between snapshots, not full copies. Hundreds of snapshots typically take up around 50MB.
+
+**Can I use this with After Effects?**
+Premiere Pro only for now.
+
+**What if I already use git?**
+Rewind uses its own hidden `.rewind` directory and does not interfere with any existing repos.
+
+**Can multiple people work on the same project?**
+Single-user for now. Collaboration is planned for v2.
+
+---
+
+## How it works
+
+Under the hood, Rewind is powered by git — but you never have to touch it.
+
+Premiere Pro `.prproj` files are compressed XML. Rewind decompresses them and tracks the XML in a hidden git repository (the `.rewind` folder inside your project directory). Because only the actual changes are stored — not full copies of the file — storage stays small even after hundreds of snapshots.
+
+Each named version is a git branch under the hood. Switching versions is just a branch checkout. Restoring a snapshot is just a checkout of a specific commit. The complexity is hidden behind a simple UI.
 
 ```
 YourProject/
   MyEdit.prproj          <- Your Premiere Pro project
-  .ppgit/                <- ppgit's version data (hidden folder)
+  .rewind/               <- Rewind's version data (hidden folder)
     .git/                <- Git repository
     project.xml          <- Decompressed project XML
-    settings.json        <- Your ppgit settings for this project
+    settings.json        <- Your Rewind settings for this project
 ```
 
-Each project has its own `.ppgit` folder. Nothing is shared between projects.
+---
 
-## Privacy & Security
+## Privacy & security
 
-- Your GitHub token is encrypted and stored locally at `~/.ppgit/credentials.json`
-- All GitHub repos created by ppgit are **private** by default
-- ppgit never sends data anywhere except your own GitHub account
-- The `.ppgit` folder is local to your machine
+- Your GitHub token is encrypted and stored locally
+- All GitHub repos created by Rewind are **private** by default
+- Rewind never sends data anywhere except your own GitHub account
+- The `.rewind` folder is local to your machine
+
+---
 
 ## Contributing
 
-Contributions welcome! This is an open source project under the MIT license.
+Contributions welcome! This is an open source project.
 
 1. Fork the repo
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
 
-## FAQ
-
-**Q: Does ppgit slow down Premiere Pro?**
-A: No. ppgit runs in a separate panel process and uses lightweight file watching. Snapshots happen in the background.
-
-**Q: How much disk space does it use?**
-A: Git is very efficient with text diffs. A project with hundreds of snapshots typically uses less than 50MB.
-
-**Q: Can I use this with After Effects / Audition / other Adobe apps?**
-A: Currently Premiere Pro only. Other Adobe apps may be supported in the future.
-
-**Q: What if I already use git for my project?**
-A: ppgit uses its own isolated `.ppgit` directory and does not interfere with any existing git repos.
-
-**Q: Can multiple people use ppgit on the same project?**
-A: Currently designed for single-user workflows. Collaboration features are planned.
+---
 
 ## License
 

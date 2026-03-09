@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://api.github.com https://*.githubusercontent.com; img-src 'self' data: https://*.githubusercontent.com;">
-    <title>ppgit</title>
+    <title>Rewind</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <div class="header">
         <div class="header-left">
             <div id="status-dot" class="status-dot"></div>
-            <span class="header-title">ppgit</span>
+            <span class="header-title">Rewind</span>
         </div>
         <div class="header-actions">
             <button id="github-btn" class="icon-btn" title="GitHub">&#9729;</button>
@@ -47,13 +47,32 @@
     <!-- Init Panel (shown when not tracking) -->
     <div id="init-panel" class="init-panel">
         <div class="icon">&#128193;</div>
-        <p>Track changes to your Premiere Pro project with automatic snapshots.</p>
+        <p>Stop naming your projects _FINAL_FINAL2.prproj</p>
+        <p class="init-subtitle">Full version history for every Premiere Pro project.</p>
         <button id="init-btn" class="init-btn">Start Tracking</button>
     </div>
 
     <!-- Main Panel (shown when tracking) -->
     <div id="main-panel" style="display:none; flex-direction:column; flex:1; min-height:0;">
-        <div class="project-info" id="project-info"></div>
+
+        <!-- Version selector + project info bar -->
+        <div class="version-bar">
+            <div class="version-selector-wrap">
+                <button id="version-dropdown-btn" class="version-dropdown-btn">
+                    <span id="current-version-name">Main Edit</span>
+                    <span class="dropdown-arrow">&#9662;</span>
+                </button>
+                <div id="version-dropdown" class="version-dropdown" style="display:none;">
+                    <div id="version-list" class="version-list"></div>
+                    <div class="version-dropdown-divider"></div>
+                    <button id="new-version-btn" class="new-version-option">+ New Version</button>
+                </div>
+            </div>
+            <div class="version-bar-right">
+                <span id="project-info" class="project-info"></span>
+                <span id="status-saved" class="status-saved"></span>
+            </div>
+        </div>
 
         <div id="timeline-container" class="timeline-container">
             <div id="timeline" class="timeline"></div>
@@ -65,7 +84,7 @@
 
         <div class="bottom-bar">
             <div class="snapshot-row">
-                <input id="snapshot-input" class="snapshot-input" type="text" placeholder="Snapshot message (optional)" maxlength="200">
+                <input id="snapshot-input" class="snapshot-input" type="text" placeholder="Snapshot label (optional)" maxlength="200">
                 <button id="snapshot-btn" class="snapshot-btn">Snapshot</button>
             </div>
         </div>
@@ -111,6 +130,42 @@
         </div>
     </div>
 
+    <!-- New Version Modal -->
+    <div id="version-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">New Version</div>
+            <p class="modal-desc">Create a copy of the current version to experiment with.</p>
+            <input id="version-name-input" type="text" class="modal-input" placeholder="e.g. Short Intro Alt" maxlength="60">
+            <div class="modal-actions">
+                <button id="version-cancel" class="modal-btn secondary">Cancel</button>
+                <button id="version-create" class="modal-btn primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Version Confirm -->
+    <div id="delete-version-modal" class="modal-overlay confirm-dialog">
+        <div class="modal">
+            <div class="modal-title">Delete Version</div>
+            <div id="delete-version-text" class="confirm-text">This will permanently delete this version and all its history. Continue?</div>
+            <div class="modal-actions">
+                <button id="delete-version-no" class="modal-btn secondary">Cancel</button>
+                <button id="delete-version-yes" class="modal-btn primary danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff Modal -->
+    <div id="diff-modal" class="modal-overlay">
+        <div class="modal modal-wide">
+            <div class="modal-title" id="diff-modal-title">Changes</div>
+            <div id="diff-content" class="diff-content">Loading...</div>
+            <div class="modal-actions">
+                <button id="diff-close" class="modal-btn secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
@@ -121,6 +176,7 @@
     <script src="js/prproj-handler.js"></script>
     <script src="js/git-manager.js"></script>
     <script src="js/github-manager.js"></script>
+    <script src="js/diff-engine.js"></script>
     <script src="js/version-controller.js"></script>
     <script src="js/app.js"></script>
 </body>

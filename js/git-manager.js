@@ -35,10 +35,9 @@
         return fs.promises.mkdir(repoPath, { recursive: true }).then(function() {
             return runGit(repoPath, ['init']);
         }).then(function() {
-            // Configure user for this repo
-            return runGit(repoPath, ['config', 'user.email', 'ppgit@local']);
+            return runGit(repoPath, ['config', 'user.email', 'rewind@local']);
         }).then(function() {
-            return runGit(repoPath, ['config', 'user.name', 'ppgit']);
+            return runGit(repoPath, ['config', 'user.name', 'rewind']);
         });
     }
 
@@ -77,7 +76,7 @@
     }
 
     /**
-     * Checkout a specific commit (detached HEAD)
+     * Checkout a specific commit's files (without detaching HEAD)
      */
     function checkout(repoPath, commitHash) {
         return runGit(repoPath, ['checkout', commitHash, '--', '.']);
@@ -123,6 +122,64 @@
         });
     }
 
+    // --- Branching ---
+
+    /**
+     * Create and checkout a new branch
+     */
+    function createBranch(repoPath, branchName) {
+        return runGit(repoPath, ['checkout', '-b', branchName]);
+    }
+
+    /**
+     * Switch to an existing branch
+     */
+    function switchBranch(repoPath, branchName) {
+        return runGit(repoPath, ['checkout', branchName]);
+    }
+
+    /**
+     * List all local branches
+     * @returns {Promise<Array<{name: string, current: boolean}>>}
+     */
+    function listBranches(repoPath) {
+        return runGit(repoPath, ['branch', '--list']).then(function(output) {
+            if (!output) return [];
+            return output.split('\n').map(function(line) {
+                var current = line.charAt(0) === '*';
+                var name = line.replace(/^\*?\s+/, '').trim();
+                return { name: name, current: current };
+            }).filter(function(b) { return b.name; });
+        }).catch(function() {
+            return [];
+        });
+    }
+
+    /**
+     * Get the current branch name
+     */
+    function getCurrentBranch(repoPath) {
+        return runGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(function() {
+            return 'master';
+        });
+    }
+
+    /**
+     * Delete a branch (force)
+     */
+    function deleteBranch(repoPath, branchName) {
+        return runGit(repoPath, ['branch', '-D', branchName]);
+    }
+
+    /**
+     * Get file content at a specific commit
+     */
+    function showFile(repoPath, commitHash, filePath) {
+        return runGit(repoPath, ['show', commitHash + ':' + filePath]).catch(function() {
+            return null;
+        });
+    }
+
     window.GitManager = {
         init: init,
         commit: commit,
@@ -131,6 +188,13 @@
         diffStat: diffStat,
         hasChanges: hasChanges,
         getHead: getHead,
-        commitCount: commitCount
+        commitCount: commitCount,
+        // Branching
+        createBranch: createBranch,
+        switchBranch: switchBranch,
+        listBranches: listBranches,
+        getCurrentBranch: getCurrentBranch,
+        deleteBranch: deleteBranch,
+        showFile: showFile
     };
 })();

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="11.0" ExtensionBundleId="com.ppgit.versioncontrol"
-  ExtensionBundleVersion="1.0.0" ExtensionBundleName="ppgit"
+<ExtensionManifest Version="11.0" ExtensionBundleId="com.rewind.versioncontrol"
+  ExtensionBundleVersion="1.0.0" ExtensionBundleName="Rewind"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <ExtensionList>
-    <Extension Id="com.ppgit.versioncontrol.panel" Version="1.0.0" />
+    <Extension Id="com.rewind.versioncontrol.panel" Version="1.0.0" />
   </ExtensionList>
 
   <ExecutionEnvironment>
@@ -20,7 +20,7 @@
   </ExecutionEnvironment>
 
   <DispatchInfoList>
-    <Extension Id="com.ppgit.versioncontrol.panel">
+    <Extension Id="com.rewind.versioncontrol.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
@@ -34,7 +34,7 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>ppgit</Menu>
+          <Menu>Rewind</Menu>
           <Geometry>
             <Size>
               <Height>500</Height>

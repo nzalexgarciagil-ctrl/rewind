@@ -1,4 +1,4 @@
-// github-manager.js - GitHub integration for ppgit
+// github-manager.js - GitHub integration for Rewind
 
 (function() {
     'use strict';
@@ -10,13 +10,34 @@
     var crypto = cep_node.require('crypto');
     var childProcess = cep_node.require('child_process');
 
-    var CREDENTIALS_DIR = path.join(os.homedir(), '.ppgit');
+    var CREDENTIALS_DIR = path.join(os.homedir(), '.rewind');
     var CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'credentials.json');
+    var OLD_CREDENTIALS_DIR = path.join(os.homedir(), '.ppgit');
+    var OLD_CREDENTIALS_FILE = path.join(OLD_CREDENTIALS_DIR, 'credentials.json');
     var GIT_EXE = 'git';
     var GITHUB_API = 'api.github.com';
 
     var cachedToken = null;
     var cachedUser = null;
+
+    // --- Migration ---
+
+    function migrateCredentials() {
+        try {
+            if (!fs.existsSync(CREDENTIALS_FILE) && fs.existsSync(OLD_CREDENTIALS_FILE)) {
+                if (!fs.existsSync(CREDENTIALS_DIR)) {
+                    fs.mkdirSync(CREDENTIALS_DIR, { recursive: true });
+                }
+                fs.copyFileSync(OLD_CREDENTIALS_FILE, CREDENTIALS_FILE);
+                console.log('rewind: migrated credentials from ~/.ppgit to ~/.rewind');
+            }
+        } catch (e) {
+            console.warn('rewind: credential migration failed:', e.message);
+        }
+    }
+
+    // Run migration on load
+    migrateCredentials();
 
     // --- Helpers ---
 
@@ -27,7 +48,7 @@
                 path: apiPath,
                 method: method,
                 headers: {
-                    'User-Agent': 'ppgit/1.0',
+                    'User-Agent': 'rewind/1.0',
                     'Accept': 'application/vnd.github.v3+json',
                     'Authorization': 'Bearer ' + token
                 }
@@ -93,10 +114,11 @@
         try {
             return os.hostname() + '-' + os.userInfo().username;
         } catch (e) {
-            return 'ppgit-default-key';
+            return 'rewind-default-key';
         }
     }
 
+    // Keep ppgit-salt for backwards compatibility with existing encrypted tokens
     function encryptToken(token) {
         try {
             var key = crypto.scryptSync(getMachineId(), 'ppgit-salt', 32);
@@ -105,7 +127,6 @@
             var encrypted = cipher.update(token, 'utf8', 'hex') + cipher.final('hex');
             return { encrypted: encrypted, iv: iv.toString('hex') };
         } catch (e) {
-            // Fallback: base64 encode (not secure, but functional)
             return { plaintext: Buffer.from(token).toString('base64') };
         }
     }
@@ -138,7 +159,7 @@
             };
             fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2));
         } catch (e) {
-            console.error('ppgit: Failed to save credentials:', e.message);
+            console.error('rewind: Failed to save credentials:', e.message);
         }
     }
 
@@ -226,11 +247,11 @@
         var token = getToken();
         if (!token) return Promise.reject(new Error('Not authenticated'));
 
-        var repoName = 'ppgit-' + sanitizeRepoName(projectName);
+        var repoName = 'rewind-' + sanitizeRepoName(projectName);
 
         return githubRequest('POST', '/user/repos', token, {
             name: repoName,
-            description: 'ppgit backup: ' + projectName,
+            description: 'Rewind backup: ' + projectName,
             private: true,
             auto_init: false
         }).then(function(repo) {
@@ -259,7 +280,7 @@
     }
 
     function getOrCreateRepo(projectName) {
-        var repoName = 'ppgit-' + sanitizeRepoName(projectName);
+        var repoName = 'rewind-' + sanitizeRepoName(projectName);
         var token = getToken();
         if (!token) return Promise.reject(new Error('Not authenticated'));
         var user = getUser();
@@ -288,19 +309,29 @@
         });
     }
 
+    /**
+     * Push current branch to origin
+     */
     function push(repoPath) {
-        return runGit(repoPath, ['push', '-u', 'origin', 'master']).catch(function(err) {
-            // If remote has no master yet, try --set-upstream
+        return getCurrentBranch(repoPath).then(function(branch) {
+            return runGit(repoPath, ['push', '-u', 'origin', branch]);
+        }).catch(function(err) {
             if (err.message.indexOf('has no upstream') !== -1 || err.message.indexOf('does not appear to be a git') !== -1) {
-                return runGit(repoPath, ['push', '--set-upstream', 'origin', 'master']);
+                return getCurrentBranch(repoPath).then(function(branch) {
+                    return runGit(repoPath, ['push', '--set-upstream', 'origin', branch]);
+                });
             }
             throw err;
         });
     }
 
+    /**
+     * Pull current branch from origin
+     */
     function pull(repoPath) {
-        return runGit(repoPath, ['pull', '--rebase', 'origin', 'master']).catch(function(err) {
-            // Ignore if remote is empty or no tracking
+        return getCurrentBranch(repoPath).then(function(branch) {
+            return runGit(repoPath, ['pull', '--rebase', 'origin', branch]);
+        }).catch(function(err) {
             if (err.message.indexOf("couldn't find remote ref") !== -1 ||
                 err.message.indexOf('no tracking information') !== -1) {
                 return '';
@@ -324,6 +355,12 @@
     function getRemoteUrl(repoPath) {
         return runGit(repoPath, ['remote', 'get-url', 'origin']).catch(function() {
             return null;
+        });
+    }
+
+    function getCurrentBranch(repoPath) {
+        return runGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(function() {
+            return 'master';
         });
     }
 
