@@ -172,9 +172,13 @@
                     els.snapshotBtn.disabled = !!data;
                     break;
                 case 'project-closed':
-                    showInitPanel();
-                    setStatus('inactive');
-                    els.projectInfo.textContent = '';
+                    // Don't switch to init panel if we're mid-restore/switch
+                    var vcState = VersionController.getState();
+                    if (!vcState.initialized) {
+                        showInitPanel();
+                        setStatus('inactive');
+                        els.projectInfo.textContent = '';
+                    }
                     break;
                 case 'project-switched':
                     showToast('Project switched, re-initializing...');
@@ -263,6 +267,7 @@
     }
 
     function handleRestore(commitHash) {
+        console.log('rewind: restore requested for', commitHash.substring(0, 7));
         els.confirmText.textContent = 'Current state will be saved first. Restore to this snapshot?';
         showModal(els.confirmModal);
 
@@ -276,7 +281,9 @@
         confirmHandler = function() {
             cleanup();
             hideModal(els.confirmModal);
+            console.log('rewind: user confirmed restore to', commitHash.substring(0, 7));
             VersionController.restore(commitHash).catch(function(err) {
+                console.error('rewind: restore error caught in UI:', err.message);
                 showToast('Restore failed: ' + err.message, 'error');
             });
         };

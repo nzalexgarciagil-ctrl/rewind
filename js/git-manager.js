@@ -76,10 +76,10 @@
     }
 
     /**
-     * Checkout a specific commit's files (without detaching HEAD)
+     * Checkout a specific file from a commit (without detaching HEAD)
      */
-    function checkout(repoPath, commitHash) {
-        return runGit(repoPath, ['checkout', commitHash, '--', '.']);
+    function checkout(repoPath, commitHash, filePath) {
+        return runGit(repoPath, ['checkout', commitHash, '--', filePath || '.']);
     }
 
     /**

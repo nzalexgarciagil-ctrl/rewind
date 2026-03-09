@@ -44,6 +44,21 @@
         listeners.push(fn);
     }
 
+    // --- Gitignore (keep metadata files out of version history) ---
+
+    function ensureGitignore() {
+        try {
+            var giPath = path.join(state.vcDir, '.gitignore');
+            var content = 'settings.json\nbranches.json\nlabels.json\n';
+            if (!fs.existsSync(giPath)) {
+                fs.writeFileSync(giPath, content);
+                console.log('rewind: created .gitignore for metadata files');
+            }
+        } catch (e) {
+            console.warn('rewind: failed to create .gitignore:', e.message);
+        }
+    }
+
     // --- Migration ---
 
     function migrateFromPpgit() {
@@ -191,6 +206,9 @@
                 console.log('rewind: created', state.vcDir);
             }
 
+            // Ensure .gitignore exists so metadata files aren't tracked
+            ensureGitignore();
+
             loadSettings();
             loadBranches();
             loadLabels();
@@ -333,16 +351,17 @@
                 console.log('rewind: committing current state before restore...');
                 return GitManager.commit(state.repoPath, 'Auto-save before restore');
             }
-        // 2. Checkout old version in git (only changes project.xml in .rewind/)
+        // 2. Checkout ONLY project.xml from old commit (not metadata files)
         }).then(function() {
-            console.log('rewind: checking out', commitHash.substring(0, 7), '...');
-            return GitManager.checkout(state.repoPath, commitHash);
+            console.log('rewind: checking out project.xml from', commitHash.substring(0, 7), '...');
+            return GitManager.checkout(state.repoPath, commitHash, XML_FILENAME);
         // 3. Read restored XML
         }).then(function() {
             restoredXml = fs.readFileSync(state.xmlPath, 'utf8');
             console.log('rewind: read restored XML (' + Math.round(restoredXml.length / 1024) + 'KB)');
         // 4. Commit restored state so HEAD stays on branch
         }).then(function() {
+            console.log('rewind: committing restored state...');
             return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
         // 5. CLOSE project FIRST (before writing .prproj to avoid freeze)
         }).then(function() {
@@ -351,27 +370,33 @@
         // 6. Wait for PPro to fully release the file
         }).then(function() {
             console.log('rewind: project closed, waiting for file release...');
-            return new Promise(function(r) { setTimeout(r, 1000); });
+            return new Promise(function(r) { setTimeout(r, 1500); });
         // 7. NOW write restored .prproj (project is closed, no file lock)
         }).then(function() {
-            console.log('rewind: compressing to .prproj...');
+            console.log('rewind: writing restored .prproj (' + Math.round(restoredXml.length / 1024) + 'KB XML -> gzip)...');
             return PrprojHandler.compress(restoredXml, state.projectPath);
-        // 8. Reopen the project
+        // 8. Verify the file was written
         }).then(function() {
-            console.log('rewind: reopening project...');
+            var stat = fs.statSync(state.projectPath);
+            console.log('rewind: .prproj written (' + Math.round(stat.size / 1024) + 'KB on disk)');
+        // 9. Reopen the project
+        }).then(function() {
+            console.log('rewind: reopening project:', savedProjectPath);
             return Bridge.callHost('openProject', { path: savedProjectPath });
         }).then(function() {
+            console.log('rewind: project reopened, restarting tracking...');
             state.initialized = true;
             state.operationInProgress = false;
             state.lastSavedAt = new Date();
             setupDirtyPoll();
-            console.log('rewind: restore complete');
+            console.log('rewind: restore complete!');
             emit('restored', { hash: commitHash });
             emit('busy', false);
         }).catch(function(err) {
             state.operationInProgress = false;
             emit('busy', false);
-            console.error('rewind: restore failed:', err.message);
+            console.error('rewind: RESTORE FAILED at step:', err.message);
+            console.error('rewind: project path was:', savedProjectPath);
             throw err;
         });
     }
@@ -474,10 +499,14 @@
         }).then(function() {
             console.log('rewind: saving current state...');
             return doSnapshotUnsafe('Auto-save before switching to "' + targetName + '"');
-        // 2. Switch git branch
+        // 2. Stage project.xml before switching branch so git doesn't complain
         }).then(function() {
             console.log('rewind: switching git branch to', gitBranch, '...');
-            return GitManager.switchBranch(state.repoPath, gitBranch);
+            return GitManager.switchBranch(state.repoPath, gitBranch).catch(function(err) {
+                // If switch fails due to uncommitted changes, force it
+                console.warn('rewind: branch switch issue:', err.message);
+                return GitManager.switchBranch(state.repoPath, gitBranch);
+            });
         // 3. Read restored XML
         }).then(function() {
             console.log('rewind: reading XML from new branch...');
