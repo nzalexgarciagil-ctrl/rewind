@@ -9,8 +9,7 @@
     var VC_DIR_NAME = '.ppgit';
     var XML_FILENAME = 'project.xml';
     var SETTINGS_FILENAME = 'settings.json';
-    var POLL_INTERVAL = 3000;       // 3s project switch poll
-    var DEBOUNCE_MS = 1500;         // 1.5s file watcher debounce
+    var POLL_INTERVAL = 5000;       // 5s project-switch detection poll
 
     var state = {
         projectPath: null,          // Current .prproj path
@@ -19,17 +18,12 @@
         repoPath: null,             // Same as vcDir (git repo root)
         xmlPath: null,              // Path to project.xml inside repo
         initialized: false,
-        watching: false,
-        watcher: null,
-        debounceTimer: null,
-        pollTimer: null,
-        autoTimer: null,
+        pollTimer: null,            // Project-switch detection
+        dirtyTimer: null,           // Dirty-check auto-save timer
         operationInProgress: false,
         settings: {
-            autoSnapshotOnSave: true,
-            autoIntervalMinutes: 0,  // 0 = disabled
-            maxSnapshots: 0,         // 0 = unlimited
-            autoPush: false          // auto-push to GitHub after snapshot
+            autoSaveIntervalSeconds: 60, // How often to check dirty + save (0 = off)
+            autoPush: false              // Auto-push to GitHub after each snapshot
         }
     };
 
@@ -78,9 +72,8 @@
         } catch (e) {
             console.error('Failed to save settings:', e.message);
         }
-        // Restart watchers with new settings
-        setupAutoInterval();
-        setupFileWatcher();
+        // Restart dirty-poll with new settings
+        setupDirtyPoll();
         emit('settings-changed', state.settings);
     }
 
@@ -117,8 +110,7 @@
             return doSnapshot('Initial snapshot');
         }).then(function() {
             state.initialized = true;
-            setupFileWatcher();
-            setupAutoInterval();
+            setupDirtyPoll();
             startProjectPoll();
             emit('initialized', { projectPath: state.projectPath });
             return state;
@@ -246,70 +238,35 @@
     }
 
     /**
-     * File watcher with debounce for auto-snapshot on save
+     * Dirty-check poll: every N seconds ask PPro if the project has unsaved
+     * changes. If yes, we save it ourselves and take a snapshot.
+     * This is the core auto-save mechanism — no file watcher needed.
      */
-    function setupFileWatcher() {
-        if (state.watcher) {
-            state.watcher.close();
-            state.watcher = null;
+    function setupDirtyPoll() {
+        if (state.dirtyTimer) {
+            clearInterval(state.dirtyTimer);
+            state.dirtyTimer = null;
         }
-        if (!state.settings.autoSnapshotOnSave || !state.projectPath) return;
+        var seconds = state.settings.autoSaveIntervalSeconds;
+        if (!seconds || seconds <= 0 || !state.projectPath) return;
 
-        state.watching = true;
-        try {
-            state.watcher = fs.watch(state.projectPath, function() {
-                clearTimeout(state.debounceTimer);
-                state.debounceTimer = setTimeout(function() {
-                    doSnapshot('Auto-snapshot (file change)').then(function(committed) {
-                        if (committed) emit('auto-snapshot', {});
-                    }).catch(function(err) {
-                        console.error('Auto-snapshot failed:', err.message);
-                    });
-                }, DEBOUNCE_MS);
-            });
-        } catch (e) {
-            console.error('File watcher setup failed:', e.message);
-            state.watching = false;
-        }
-    }
+        state.dirtyTimer = setInterval(function() {
+            if (!state.initialized || state.operationInProgress) return;
 
-    /**
-     * Interval-based auto-snapshot
-     */
-    function setupAutoInterval() {
-        if (state.autoTimer) {
-            clearInterval(state.autoTimer);
-            state.autoTimer = null;
-        }
-        var minutes = state.settings.autoIntervalMinutes;
-        if (!minutes || minutes <= 0) return;
-
-        state.autoTimer = setInterval(function() {
-            if (!state.initialized) return;
-            GitManager.hasChanges(state.repoPath).then(function(changed) {
-                if (!changed) {
-                    // Decompress and check if prproj changed since last snapshot
-                    return PrprojHandler.decompress(state.projectPath).then(function(xml) {
-                        var current = '';
-                        try { current = fs.readFileSync(state.xmlPath, 'utf8'); } catch(e) {}
-                        if (xml !== current) {
-                            fs.writeFileSync(state.xmlPath, xml, 'utf8');
-                            return GitManager.hasChanges(state.repoPath);
-                        }
-                        return false;
-                    });
-                }
-                return changed;
-            }).then(function(shouldCommit) {
-                if (shouldCommit) {
-                    return doSnapshot('Auto-snapshot (interval)').then(function() {
-                        emit('auto-snapshot', {});
-                    });
-                }
+            Bridge.callHost('isProjectDirty').then(function(dirty) {
+                if (!dirty) return; // Nothing changed since last save — skip
+                // Project has unsaved changes — save then snapshot
+                return Bridge.callHost('saveProject').then(function() {
+                    return new Promise(function(r) { setTimeout(r, 500); });
+                }).then(function() {
+                    return doSnapshot('Auto-snapshot');
+                }).then(function(committed) {
+                    if (committed) emit('auto-snapshot', {});
+                });
             }).catch(function(err) {
-                console.error('Interval snapshot failed:', err.message);
+                console.error('ppgit: dirty-poll failed:', err.message);
             });
-        }, minutes * 60 * 1000);
+        }, seconds * 1000);
     }
 
     /**
@@ -344,15 +301,12 @@
     }
 
     /**
-     * Clean up watchers and timers
+     * Clean up timers
      */
     function cleanup() {
-        if (state.watcher) { state.watcher.close(); state.watcher = null; }
-        if (state.autoTimer) { clearInterval(state.autoTimer); state.autoTimer = null; }
-        if (state.debounceTimer) { clearTimeout(state.debounceTimer); }
+        if (state.dirtyTimer) { clearInterval(state.dirtyTimer); state.dirtyTimer = null; }
         if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
         state.initialized = false;
-        state.watching = false;
     }
 
     /**
@@ -379,7 +333,7 @@
         getHistory: getHistory,
         saveSettings: saveSettings,
         getSettings: function() { return Object.assign({}, state.settings); },
-        getState: function() { return { initialized: state.initialized, projectPath: state.projectPath, watching: state.watching }; },
+        getState: function() { return { initialized: state.initialized, projectPath: state.projectPath }; },
         getRepoPath: function() { return state.repoPath; },
         isTracked: isTracked,
         on: on,

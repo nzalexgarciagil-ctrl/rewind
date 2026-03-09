@@ -179,6 +179,9 @@ function handleMessage(type, dataStr) {
             case "getProjectPath":
                 result = getProjectPath();
                 break;
+            case "isProjectDirty":
+                result = isProjectDirty();
+                break;
             case "saveProject":
                 result = saveProject();
                 break;
@@ -201,6 +204,14 @@ function getProjectPath() {
         return "";
     }
     return app.project.path;
+}
+
+
+function isProjectDirty() {
+    if (!app.project) {
+        return false;
+    }
+    return app.project.dirty;
 }
 
 

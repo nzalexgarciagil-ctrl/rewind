@@ -42,7 +42,6 @@
         els.confirmText = document.getElementById('confirm-text');
         els.confirmYes = document.getElementById('confirm-yes');
         els.confirmNo = document.getElementById('confirm-no');
-        els.autoSaveToggle = document.getElementById('auto-save-toggle');
         els.intervalSelect = document.getElementById('interval-select');
         els.autoPushToggle = document.getElementById('auto-push-toggle');
         els.settingsSave = document.getElementById('settings-save');
@@ -394,16 +393,14 @@
     // Settings
     function openSettings() {
         var s = VersionController.getSettings();
-        els.autoSaveToggle.checked = s.autoSnapshotOnSave;
-        els.intervalSelect.value = String(s.autoIntervalMinutes);
+        els.intervalSelect.value = String(s.autoSaveIntervalSeconds);
         els.autoPushToggle.checked = !!s.autoPush;
         showModal(els.settingsModal);
     }
 
     function handleSaveSettings() {
         VersionController.saveSettings({
-            autoSnapshotOnSave: els.autoSaveToggle.checked,
-            autoIntervalMinutes: parseInt(els.intervalSelect.value, 10),
+            autoSaveIntervalSeconds: parseInt(els.intervalSelect.value, 10),
             autoPush: els.autoPushToggle.checked
         });
         hideModal(els.settingsModal);
