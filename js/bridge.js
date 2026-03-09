@@ -8,6 +8,8 @@
     var ALLOWED_COMMANDS = {
         getProjectPath: true,
         saveProject: true,
+        closeProject: true,
+        openProject: true,
         closeAndReopenProject: true
     };
 

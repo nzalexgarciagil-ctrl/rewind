@@ -182,6 +182,12 @@ function handleMessage(type, dataStr) {
             case "saveProject":
                 result = saveProject();
                 break;
+            case "closeProject":
+                result = closeProject();
+                break;
+            case "openProject":
+                result = openProject(data);
+                break;
             case "closeAndReopenProject":
                 result = closeAndReopenProject(data);
                 break;
@@ -213,17 +219,27 @@ function saveProject() {
 }
 
 
-function closeAndReopenProject(data) {
+function closeProject() {
+    if (!app.project) {
+        throw new Error("No project open");
+    }
+    app.project.closeDocument();
+    return "closed";
+}
+
+
+function openProject(data) {
     var projectPath = data.path;
     if (!projectPath) {
         throw new Error("No path provided");
     }
-
-    // Close current project WITHOUT saving — the restored file is already on disk
-    app.project.closeDocument();
-
-    // Open the project from the given path
     app.openDocument(projectPath);
+    return "opened";
+}
 
+
+function closeAndReopenProject(data) {
+    closeProject();
+    openProject(data);
     return "reopened";
 }

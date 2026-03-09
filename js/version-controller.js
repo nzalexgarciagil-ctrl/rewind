@@ -176,36 +176,63 @@
     }
 
     /**
-     * Restore a previous snapshot
+     * Restore a previous snapshot.
+     *
+     * Order of operations:
+     *  1. Lock operationInProgress for the entire restore (blocks dirty poll)
+     *  2. Save + snapshot current state (manually, bypassing the lock)
+     *  3. git checkout old version → project.xml is now the old XML
+     *  4. Close the project in PPro (no file-changed dialog yet)
+     *  5. Write old XML → .prproj while project is closed (safe, no dialog)
+     *  6. Commit "Restored to..." so git stays on the branch
+     *  7. Open the project from disk (gets the restored version)
      */
     function restore(commitHash) {
         if (state.operationInProgress) {
             return Promise.resolve(null);
         }
+        state.operationInProgress = true;
         emit('busy', true);
-        // Safety snapshot first — silent save then commit
+
+        var restoredXml;
+
+        // Step 1-2: Save + manually snapshot current state
         return Bridge.callHost('saveProject').then(function() {
             return new Promise(function(r) { setTimeout(r, 500); });
         }).then(function() {
-            return doSnapshot('Auto-save before restore');
+            return PrprojHandler.decompress(state.projectPath);
+        }).then(function(xml) {
+            return fs.promises.writeFile(state.xmlPath, xml, 'utf8').then(function() {
+                return GitManager.hasChanges(state.repoPath);
+            });
+        }).then(function(changed) {
+            if (changed) {
+                return GitManager.commit(state.repoPath, 'Auto-save before restore');
+            }
+        // Step 3: Restore old files from git
         }).then(function() {
-            // Checkout the old commit's files
             return GitManager.checkout(state.repoPath, commitHash);
+        // Step 4: Read the restored XML
         }).then(function() {
-            // Read the restored XML
-            var xml = fs.readFileSync(state.xmlPath, 'utf8');
-            // Recompress to .prproj
-            return PrprojHandler.compress(xml, state.projectPath);
+            restoredXml = fs.readFileSync(state.xmlPath, 'utf8');
+        // Step 5: Close the project BEFORE writing to disk (prevents "file changed" dialog)
         }).then(function() {
-            // Commit the restored state so we stay on the branch
+            return Bridge.callHost('closeProject');
+        // Step 6: Write restored .prproj to disk while project is closed
+        }).then(function() {
+            return PrprojHandler.compress(restoredXml, state.projectPath);
+        // Step 7: Commit restored state so HEAD stays on branch
+        }).then(function() {
             return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
+        // Step 8: Open the project — now reads the restored file from disk
         }).then(function() {
-            // Tell PPro to close and reopen the project
-            return Bridge.callHost('closeAndReopenProject', { path: state.projectPath });
+            return Bridge.callHost('openProject', { path: state.projectPath });
         }).then(function() {
+            state.operationInProgress = false;
             emit('restored', { hash: commitHash });
             emit('busy', false);
         }).catch(function(err) {
+            state.operationInProgress = false;
             emit('busy', false);
             throw err;
         });
