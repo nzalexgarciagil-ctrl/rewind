@@ -178,14 +178,16 @@
     /**
      * Restore a previous snapshot.
      *
-     * Order of operations:
-     *  1. Lock operationInProgress for the entire restore (blocks dirty poll)
-     *  2. Save + snapshot current state (manually, bypassing the lock)
-     *  3. git checkout old version → project.xml is now the old XML
-     *  4. Close the project in PPro (no file-changed dialog yet)
-     *  5. Write old XML → .prproj while project is closed (safe, no dialog)
-     *  6. Commit "Restored to..." so git stays on the branch
-     *  7. Open the project from disk (gets the restored version)
+     * Key design decisions:
+     * - operationInProgress = true for the ENTIRE restore so the dirty poll
+     *   cannot fire and overwrite our restored file mid-operation.
+     * - We use a single atomic closeAndReopenProject ExtendScript call.
+     *   Splitting into two calls creates a gap where the project poll sees
+     *   "no project open", calls cleanup(), and destroys all tracking state.
+     * - We write the restored .prproj BEFORE the close+reopen call.
+     *   PPro may briefly flash a "file changed" dialog but the immediate
+     *   close+reopen dismisses it before the user can interact with it.
+     * - After reopen we explicitly restart tracking so dirty poll resumes.
      */
     function restore(commitHash) {
         if (state.operationInProgress) {
@@ -195,8 +197,9 @@
         emit('busy', true);
 
         var restoredXml;
+        var savedProjectPath = state.projectPath;
 
-        // Step 1-2: Save + manually snapshot current state
+        // 1. Save + manually snapshot current state
         return Bridge.callHost('saveProject').then(function() {
             return new Promise(function(r) { setTimeout(r, 500); });
         }).then(function() {
@@ -209,26 +212,28 @@
             if (changed) {
                 return GitManager.commit(state.repoPath, 'Auto-save before restore');
             }
-        // Step 3: Restore old files from git
+        // 2. Checkout old version
         }).then(function() {
             return GitManager.checkout(state.repoPath, commitHash);
-        // Step 4: Read the restored XML
+        // 3. Read restored XML
         }).then(function() {
             restoredXml = fs.readFileSync(state.xmlPath, 'utf8');
-        // Step 5: Close the project BEFORE writing to disk (prevents "file changed" dialog)
-        }).then(function() {
-            return Bridge.callHost('closeProject');
-        // Step 6: Write restored .prproj to disk while project is closed
+        // 4. Write restored .prproj to disk
         }).then(function() {
             return PrprojHandler.compress(restoredXml, state.projectPath);
-        // Step 7: Commit restored state so HEAD stays on branch
+        // 5. Commit restored state so git HEAD stays on the branch
         }).then(function() {
             return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
-        // Step 8: Open the project — now reads the restored file from disk
+        // 6. Atomic close + reopen in one ExtendScript call.
+        //    This avoids the "home screen gap" that breaks tracking state.
         }).then(function() {
-            return Bridge.callHost('openProject', { path: state.projectPath });
+            return Bridge.callHost('closeAndReopenProject', { path: savedProjectPath });
         }).then(function() {
+            // 7. Reopen finished — restore tracking state that may have been
+            //    disrupted by the project poll during the close window.
+            state.initialized = true;
             state.operationInProgress = false;
+            setupDirtyPoll();
             emit('restored', { hash: commitHash });
             emit('busy', false);
         }).catch(function(err) {
@@ -302,6 +307,10 @@
         if (state.pollTimer) clearInterval(state.pollTimer);
 
         state.pollTimer = setInterval(function() {
+            // Don't touch state during a restore — close+reopen causes a
+            // brief "no project" window that would trigger a false cleanup.
+            if (state.operationInProgress) return;
+
             Bridge.callHost('getProjectPath').then(function(currentPath) {
                 if (!currentPath) {
                     if (state.initialized) {
@@ -315,7 +324,6 @@
                     // Project switched
                     cleanup();
                     emit('project-switched', { newPath: currentPath });
-                    // Auto-initialize for the new project
                     initialize().catch(function(err) {
                         console.error('Re-init for new project failed:', err.message);
                     });
