@@ -300,6 +300,12 @@
     }
 
     // --- Restore ---
+    //
+    // Critical order: CLOSE project first, THEN write .prproj, THEN reopen.
+    // Writing the .prproj while PPro has it open causes a "file changed
+    // externally" dialog that deadlocks with ExtendScript and freezes PPro.
+    // operationInProgress prevents the project poll from triggering cleanup
+    // during the close->open gap.
 
     function restore(commitHash) {
         if (state.operationInProgress) {
@@ -327,7 +333,7 @@
                 console.log('rewind: committing current state before restore...');
                 return GitManager.commit(state.repoPath, 'Auto-save before restore');
             }
-        // 2. Checkout old version
+        // 2. Checkout old version in git (only changes project.xml in .rewind/)
         }).then(function() {
             console.log('rewind: checking out', commitHash.substring(0, 7), '...');
             return GitManager.checkout(state.repoPath, commitHash);
@@ -335,17 +341,25 @@
         }).then(function() {
             restoredXml = fs.readFileSync(state.xmlPath, 'utf8');
             console.log('rewind: read restored XML (' + Math.round(restoredXml.length / 1024) + 'KB)');
-        // 4. Write restored .prproj
+        // 4. Commit restored state so HEAD stays on branch
+        }).then(function() {
+            return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
+        // 5. CLOSE project FIRST (before writing .prproj to avoid freeze)
+        }).then(function() {
+            console.log('rewind: closing project...');
+            return Bridge.callHost('closeProject');
+        // 6. Wait for PPro to fully release the file
+        }).then(function() {
+            console.log('rewind: project closed, waiting for file release...');
+            return new Promise(function(r) { setTimeout(r, 1000); });
+        // 7. NOW write restored .prproj (project is closed, no file lock)
         }).then(function() {
             console.log('rewind: compressing to .prproj...');
             return PrprojHandler.compress(restoredXml, state.projectPath);
-        // 5. Commit restored state
+        // 8. Reopen the project
         }).then(function() {
-            return GitManager.commit(state.repoPath, 'Restored to ' + commitHash.substring(0, 7));
-        // 6. Atomic close + reopen
-        }).then(function() {
-            console.log('rewind: closing and reopening project...');
-            return Bridge.callHost('closeAndReopenProject', { path: savedProjectPath });
+            console.log('rewind: reopening project...');
+            return Bridge.callHost('openProject', { path: savedProjectPath });
         }).then(function() {
             state.initialized = true;
             state.operationInProgress = false;
@@ -468,14 +482,24 @@
         }).then(function() {
             console.log('rewind: reading XML from new branch...');
             return fs.promises.readFile(state.xmlPath, 'utf8');
-        // 4. Write to .prproj
+        // 4. Close project FIRST (before writing .prproj to avoid freeze)
         }).then(function(xml) {
-            console.log('rewind: compressing to .prproj...');
-            return PrprojHandler.compress(xml, state.projectPath);
-        // 5. Atomic close + reopen
+            // Store xml for step 6
+            state._switchXml = xml;
+            console.log('rewind: closing project...');
+            return Bridge.callHost('closeProject');
+        // 5. Wait for PPro to release the file
         }).then(function() {
-            console.log('rewind: closing and reopening project...');
-            return Bridge.callHost('closeAndReopenProject', { path: savedProjectPath });
+            return new Promise(function(r) { setTimeout(r, 1000); });
+        // 6. Write .prproj (project is now closed, no file lock)
+        }).then(function() {
+            console.log('rewind: compressing to .prproj...');
+            return PrprojHandler.compress(state._switchXml, state.projectPath);
+        // 7. Reopen the project
+        }).then(function() {
+            delete state._switchXml;
+            console.log('rewind: reopening project...');
+            return Bridge.callHost('openProject', { path: savedProjectPath });
         }).then(function() {
             state.currentBranch = gitBranch;
             state.initialized = true;
