@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Rewind Headless Example</title>
+    <script src="rewind-sdk/cep/CSInterface.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #CCC; background: #1E1E1E; padding: 16px; }
+        button { background: #4A90D9; border: none; color: #FFF; padding: 6px 12px; border-radius: 3px; cursor: pointer; margin: 4px; }
+        button:hover { background: #5BA0E9; }
+        #log { background: #161616; padding: 10px; border-radius: 4px; margin-top: 12px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; }
+        .log-entry { padding: 2px 0; border-bottom: 1px solid #222; }
+    </style>
+</head>
+<body>
+
+    <h3 style="color:#E0E0E0;">Rewind SDK - Headless Example</h3>
+    <p>This example uses the SDK programmatically with no built-in UI.</p>
+
+    <div>
+        <button onclick="startTracking()">Start Tracking</button>
+        <button onclick="takeSnapshot()">Take Snapshot</button>
+        <button onclick="showHistory()">Show History</button>
+        <button onclick="showVersions()">Show Versions</button>
+        <button onclick="createVersion()">New Version</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script src="rewind-sdk/rewind.js"></script>
+    <script>
+        var rewind = RewindSDK.init({
+            autoSaveInterval: 120,   // Auto-save every 2 minutes
+            onEvent: function(event, data) {
+                log('[event] ' + event + ': ' + JSON.stringify(data));
+            }
+        });
+
+        function log(msg) {
+            var el = document.getElementById('log');
+            var entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+            el.insertBefore(entry, el.firstChild);
+        }
+
+        function startTracking() {
+            log('Starting tracking...');
+            rewind.start().then(function() {
+                log('Tracking started!');
+            }).catch(function(err) {
+                log('ERROR: ' + err.message);
+            });
+        }
+
+        function takeSnapshot() {
+            var label = prompt('Snapshot label (optional):');
+            rewind.snapshot(label || undefined).then(function(committed) {
+                log(committed ? 'Snapshot saved!' : 'No changes detected');
+            }).catch(function(err) {
+                log('ERROR: ' + err.message);
+            });
+        }
+
+        function showHistory() {
+            rewind.getHistory(10).then(function(commits) {
+                if (commits.length === 0) { log('No history yet'); return; }
+                commits.forEach(function(c) {
+                    log('  ' + c.hash.substring(0, 7) + ' ' + c.message + ' (' + c.dateRelative + ')');
+                });
+            });
+        }
+
+        function showVersions() {
+            rewind.listVersions().then(function(versions) {
+                versions.forEach(function(v) {
+                    log('  ' + (v.current ? '* ' : '  ') + v.displayName + ' (' + v.branch + ')');
+                });
+            });
+        }
+
+        function createVersion() {
+            var name = prompt('Version name:');
+            if (!name) return;
+            rewind.createVersion(name).then(function(v) {
+                log('Created version: ' + v.displayName);
+            }).catch(function(err) {
+                log('ERROR: ' + err.message);
+            });
+        }
+    </script>
+
+</body>
+</html>
