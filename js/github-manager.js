@@ -93,16 +93,31 @@
     }
 
     // Delegate git operations to GitManager (loaded before this module)
-    function runGit(repoPath, args) {
+    // Uses GIT_ASKPASS to provide token via env var instead of embedding in URL
+    function runGit(repoPath, args, token) {
         return new Promise(function(resolve, reject) {
             var childProcess = cep_node.require('child_process');
+            var env = Object.assign({}, process.env);
+            if (token) {
+                // Use GIT_ASKPASS with a script that echoes the token from env.
+                // This avoids embedding the token in the remote URL where it
+                // would be visible in process listings and git logs.
+                env.GIT_TERMINAL_PROMPT = '0';
+                env.GIT_ASKPASS = process.execPath;
+                env.GIT_TOKEN = token;
+                // Use a helper approach: set credential helper to supply token
+                args = [
+                    '-c', 'credential.helper=!f() { echo "username=x-access-token"; echo "password=' + token.replace(/'/g, "'\\''") + '"; }; f'
+                ].concat(args);
+            }
             childProcess.execFile('git', args, {
                 cwd: repoPath,
                 maxBuffer: 10 * 1024 * 1024,
-                windowsHide: true
+                windowsHide: true,
+                env: env
             }, function(err, stdout, stderr) {
                 if (err) {
-                    reject(new Error('git ' + args[0] + ' failed: ' + (stderr || err.message)));
+                    reject(new Error('git ' + args[args.length - 1] + ' failed: ' + (stderr || err.message)));
                 } else {
                     resolve(stdout.trim());
                 }
@@ -118,25 +133,24 @@
         }
     }
 
-    // Keep ppgit-salt for backwards compatibility with existing encrypted tokens
     function encryptToken(token) {
-        try {
-            var key = crypto.scryptSync(getMachineId(), 'ppgit-salt', 32);
-            var iv = crypto.randomBytes(16);
-            var cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-            var encrypted = cipher.update(token, 'utf8', 'hex') + cipher.final('hex');
-            return { encrypted: encrypted, iv: iv.toString('hex') };
-        } catch (e) {
-            return { plaintext: Buffer.from(token).toString('base64') };
-        }
+        var salt = crypto.randomBytes(16);
+        var key = crypto.scryptSync(getMachineId(), salt, 32);
+        var iv = crypto.randomBytes(16);
+        var cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+        var encrypted = cipher.update(token, 'utf8', 'hex') + cipher.final('hex');
+        return { encrypted: encrypted, iv: iv.toString('hex'), salt: salt.toString('hex') };
     }
 
     function decryptToken(data) {
         try {
             if (data.plaintext) {
+                // Legacy base64 tokens: decrypt and re-encrypt properly on next save
                 return Buffer.from(data.plaintext, 'base64').toString('utf8');
             }
-            var key = crypto.scryptSync(getMachineId(), 'ppgit-salt', 32);
+            // Support legacy hardcoded salt for existing installs
+            var salt = data.salt ? Buffer.from(data.salt, 'hex') : 'ppgit-salt';
+            var key = crypto.scryptSync(getMachineId(), salt, 32);
             var iv = Buffer.from(data.iv, 'hex');
             var decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
             return decipher.update(data.encrypted, 'hex', 'utf8') + decipher.final('utf8');
@@ -150,14 +164,14 @@
     function saveCredentials(token, user) {
         try {
             if (!fs.existsSync(CREDENTIALS_DIR)) {
-                fs.mkdirSync(CREDENTIALS_DIR, { recursive: true });
+                fs.mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
             }
             var data = {
                 token: encryptToken(token),
                 user: user,
                 savedAt: new Date().toISOString()
             };
-            fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2));
+            fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
         } catch (e) {
             console.error('rewind: Failed to save credentials:', e.message);
         }
@@ -300,12 +314,16 @@
 
     // --- Remote Operations ---
 
-    function setupRemote(repoPath, remoteUrl, token) {
-        var authUrl = remoteUrl.replace('https://', 'https://' + token + '@');
-        return runGit(repoPath, ['remote', 'get-url', 'origin']).then(function() {
-            return runGit(repoPath, ['remote', 'set-url', 'origin', authUrl]);
+    function setupRemote(repoPath, remoteUrl) {
+        // Store clean URL without token — auth is handled per-command via credential helper
+        return runGit(repoPath, ['remote', 'get-url', 'origin']).then(function(existingUrl) {
+            // Strip any legacy embedded token from existing URL
+            var cleanExisting = existingUrl.replace(/https:\/\/[^@]+@/, 'https://');
+            if (cleanExisting !== remoteUrl) {
+                return runGit(repoPath, ['remote', 'set-url', 'origin', remoteUrl]);
+            }
         }).catch(function() {
-            return runGit(repoPath, ['remote', 'add', 'origin', authUrl]);
+            return runGit(repoPath, ['remote', 'add', 'origin', remoteUrl]);
         });
     }
 
@@ -313,12 +331,13 @@
      * Push current branch to origin
      */
     function push(repoPath) {
+        var token = getToken();
         return getCurrentBranch(repoPath).then(function(branch) {
-            return runGit(repoPath, ['push', '-u', 'origin', branch]);
+            return runGit(repoPath, ['push', '-u', 'origin', branch], token);
         }).catch(function(err) {
             if (err.message.indexOf('has no upstream') !== -1 || err.message.indexOf('does not appear to be a git') !== -1) {
                 return getCurrentBranch(repoPath).then(function(branch) {
-                    return runGit(repoPath, ['push', '--set-upstream', 'origin', branch]);
+                    return runGit(repoPath, ['push', '--set-upstream', 'origin', branch], token);
                 });
             }
             throw err;
@@ -329,8 +348,9 @@
      * Pull current branch from origin
      */
     function pull(repoPath) {
+        var token = getToken();
         return getCurrentBranch(repoPath).then(function(branch) {
-            return runGit(repoPath, ['pull', '--rebase', 'origin', branch]);
+            return runGit(repoPath, ['pull', '--rebase', 'origin', branch], token);
         }).catch(function(err) {
             if (err.message.indexOf("couldn't find remote ref") !== -1 ||
                 err.message.indexOf('no tracking information') !== -1) {

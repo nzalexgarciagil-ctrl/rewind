@@ -22,7 +22,7 @@
     function initLogFile() {
         try {
             if (!fs.existsSync(LOG_DIR)) {
-                fs.mkdirSync(LOG_DIR, { recursive: true });
+                fs.mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 });
             }
             // Rotate if too big
             if (fs.existsSync(LOG_FILE)) {
@@ -33,9 +33,9 @@
                     fs.renameSync(LOG_FILE, oldFile);
                 }
             }
-            // Write session header
+            // Write session header with restricted permissions
             var header = '\n=== Rewind session ' + new Date().toISOString() + ' ===\n';
-            fs.appendFileSync(LOG_FILE, header);
+            fs.appendFileSync(LOG_FILE, header, { mode: 0o600 });
         } catch (e) {
             // Silently fail — file logging is best-effort
         }

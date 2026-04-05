@@ -13,6 +13,8 @@
     var BRANCHES_FILENAME = 'branches.json';
     var LABELS_FILENAME = 'labels.json';
     var POLL_INTERVAL = 5000;       // 5s project-switch detection poll
+    var FILE_RELEASE_POLL_MS = 200; // Poll interval when waiting for file release
+    var FILE_RELEASE_TIMEOUT_MS = 5000; // Max wait for file release
 
     var state = {
         projectPath: null,          // Current .prproj path
@@ -35,6 +37,31 @@
     };
 
     var listeners = [];
+
+    /**
+     * Wait for a file to be writable (not locked by another process).
+     * Polls by attempting to open the file for writing.
+     */
+    function waitForFileRelease(filePath) {
+        var start = Date.now();
+        return new Promise(function(resolve, reject) {
+            function check() {
+                fs.open(filePath, 'r+', function(err, fd) {
+                    if (!err && fd !== undefined) {
+                        fs.close(fd, function() { resolve(); });
+                    } else if (Date.now() - start > FILE_RELEASE_TIMEOUT_MS) {
+                        console.warn('rewind: file release timeout, proceeding anyway');
+                        resolve();
+                    } else {
+                        setTimeout(check, FILE_RELEASE_POLL_MS);
+                    }
+                });
+            }
+            // If file doesn't exist yet, no lock to wait for
+            if (!fs.existsSync(filePath)) { resolve(); return; }
+            check();
+        });
+    }
 
     function emit(event, data) {
         listeners.forEach(function(fn) { fn(event, data); });
@@ -370,7 +397,7 @@
         // 6. Wait for PPro to fully release the file
         }).then(function() {
             console.log('rewind: project closed, waiting for file release...');
-            return new Promise(function(r) { setTimeout(r, 1500); });
+            return waitForFileRelease(savedProjectPath);
         // 7. NOW write restored .prproj (project is closed, no file lock)
         }).then(function() {
             console.log('rewind: writing restored .prproj (' + Math.round(restoredXml.length / 1024) + 'KB XML -> gzip)...');
@@ -519,7 +546,7 @@
             return Bridge.callHost('closeProject');
         // 5. Wait for PPro to release the file
         }).then(function() {
-            return new Promise(function(r) { setTimeout(r, 1000); });
+            return waitForFileRelease(savedProjectPath);
         // 6. Write .prproj (project is now closed, no file lock)
         }).then(function() {
             console.log('rewind: compressing to .prproj...');

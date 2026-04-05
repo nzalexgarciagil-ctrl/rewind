@@ -1,7 +1,9 @@
 // host.jsx - Rewind ExtendScript backend for Premiere Pro (ES3)
 // Commands: getProjectPath, saveProject, closeAndReopenProject
 
-// JSON polyfill (Crockford with 4th replace fix)
+// JSON polyfill for ExtendScript (ES3) — native JSON.parse is unavailable.
+// Uses Crockford's reference implementation with 4 security regexes to
+// validate input before eval(). This is the standard approach for ES3 runtimes.
 if (typeof JSON !== "object") {
     JSON = {};
 }

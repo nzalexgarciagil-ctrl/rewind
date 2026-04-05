@@ -235,6 +235,7 @@
         VersionController.initialize().catch(function(err) {
             showToast('Init failed: ' + err.message, 'error');
             setStatus('inactive');
+        }).finally(function() {
             els.initBtn.disabled = false;
             els.initBtn.textContent = 'Start Tracking';
         });
@@ -531,7 +532,7 @@
                     var desc = '';
                     if (s.status === 'added') desc = 'Added';
                     else if (s.status === 'removed') desc = 'Removed';
-                    else desc = s.changes + ' changes';
+                    else desc = escapeHtml(String(s.changes)) + ' changes';
                     html += '<div class="diff-item ' + cssClass + '">';
                     html += '<strong>' + escapeHtml(s.name) + '</strong>: ' + desc;
                     html += '</div>';
@@ -539,7 +540,7 @@
             }
             if (result.projectSettings && result.projectSettings.changed) {
                 html += '<div class="diff-item modified">';
-                html += result.projectSettings.count + ' project setting changes';
+                html += escapeHtml(String(result.projectSettings.count)) + ' project setting changes';
                 html += '</div>';
             }
             if (!html) {
@@ -610,11 +611,9 @@
         if (!vcState.projectPath) return Promise.resolve();
         var projectName = vcState.projectPath.replace(/\\/g, '/').split('/').pop();
         return GitHubManager.getOrCreateRepo(projectName).then(function(repo) {
-            var token = GitHubManager.getToken();
             return GitHubManager.setupRemote(
                 VersionController.getRepoPath(),
-                repo.url,
-                token
+                repo.url
             );
         }).catch(function(err) {
             console.error('rewind: GitHub remote setup failed:', err.message);
