@@ -6,7 +6,7 @@ var RewindBridge = (function() {
 
     function create(csInterface, options) {
         var cs = csInterface;
-        var hostFnName = (options && options.hostFunctionName) || 'handleMessage';
+        var hostFnName = (options && options.hostFunctionName) || 'RewindHost_handleMessage';
 
         var ALLOWED_COMMANDS = {
             getProjectPath: true,
@@ -24,13 +24,23 @@ var RewindBridge = (function() {
                 }
 
                 var dataStr = data ? JSON.stringify(data) : '{}';
-                dataStr = dataStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+                dataStr = dataStr
+                    .replace(/\\/g, '\\\\')
+                    .replace(/'/g, "\\'")
+                    .replace(/"/g, '\\"')
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r')
+                    .replace(/\t/g, '\\t');
 
                 var script = hostFnName + "('" + type + "', \"" + dataStr + "\")";
 
                 cs.evalScript(script, function(response) {
                     if (!response || response === 'undefined' || response === 'null' || response === 'EvalScript error.') {
-                        reject(new Error('ExtendScript returned no result for: ' + type));
+                        var hint = '';
+                        if (response === 'EvalScript error.') {
+                            hint = ' Check that rewind-host.jsx is configured as your ScriptPath in manifest.xml.';
+                        }
+                        reject(new Error('ExtendScript call failed for "' + type + '".' + hint));
                         return;
                     }
                     try {

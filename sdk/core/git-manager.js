@@ -14,11 +14,16 @@ var RewindGitManager = (function() {
             return new Promise(function(resolve, reject) {
                 childProcess.execFile(GIT_EXE, args, {
                     cwd: repoPath,
-                    maxBuffer: 10 * 1024 * 1024,
+                    maxBuffer: 50 * 1024 * 1024,
                     windowsHide: true
                 }, function(err, stdout, stderr) {
                     if (err) {
-                        reject(new Error('git ' + args[0] + ' failed: ' + (stderr || err.message)));
+                        var msg = 'git ' + args[0] + ' failed: ' + (stderr || err.message);
+                        if (err.code === 'ENOENT') {
+                            msg = 'Git not found at "' + GIT_EXE + '". Install Git and ensure it is in your PATH.';
+                        }
+                        console.error('rewind: ' + msg);
+                        reject(new Error(msg));
                     } else {
                         resolve(stdout.trim());
                     }
@@ -26,8 +31,19 @@ var RewindGitManager = (function() {
             });
         }
 
+        function mkdirp(dirPath) {
+            return new Promise(function(resolve, reject) {
+                fs.mkdir(dirPath, { recursive: true }, function(err) {
+                    // Ignore EEXIST for Node < 10.12 where recursive option doesn't exist
+                    if (err && err.code !== 'EEXIST') reject(err);
+                    else resolve();
+                });
+            });
+        }
+
         function init(repoPath) {
-            return fs.promises.mkdir(repoPath, { recursive: true }).then(function() {
+            console.log('rewind: git init in ' + repoPath);
+            return mkdirp(repoPath).then(function() {
                 return runGit(repoPath, ['init']);
             }).then(function() {
                 return runGit(repoPath, ['config', 'user.email', 'rewind@local']);
@@ -39,6 +55,9 @@ var RewindGitManager = (function() {
         function commit(repoPath, message) {
             return runGit(repoPath, ['add', '-A']).then(function() {
                 return runGit(repoPath, ['commit', '-m', message || 'Snapshot']);
+            }).then(function(output) {
+                console.log('rewind: git commit ok — ' + (message || 'Snapshot'));
+                return output;
             });
         }
 

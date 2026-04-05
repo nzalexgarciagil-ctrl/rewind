@@ -12,6 +12,20 @@
 (function() {
     'use strict';
 
+    if (typeof cep_node === 'undefined') {
+        throw new Error(
+            'Rewind SDK requires Adobe CEP with Node.js enabled. ' +
+            'Add --enable-nodejs and --mixed-context to your manifest.xml CEFCommandLine.'
+        );
+    }
+    if (typeof CSInterface === 'undefined') {
+        throw new Error(
+            'Rewind SDK requires CSInterface.js to be loaded first. ' +
+            'Add <script src="path/to/CSInterface.js"></script> before rewind.js.'
+        );
+    }
+
+    // BUILD_STRIP_START
     // Resolve SDK root path (directory containing this script)
     var sdkRoot = (function() {
         var scripts = document.getElementsByTagName('script');
@@ -34,11 +48,13 @@
         }
         return '.';
     })();
+    // BUILD_STRIP_END
 
     // Load SDK sub-modules synchronously via cep_node
     var fs = cep_node.require('fs');
     var nodePath = cep_node.require('path');
 
+    // BUILD_STRIP_START
     function loadModule(relativePath) {
         var fullPath = nodePath.join(sdkRoot, relativePath);
         var code = fs.readFileSync(fullPath, 'utf8');
@@ -56,6 +72,7 @@
     loadModule('core/github-manager.js');
     loadModule('core/diff-engine.js');
     loadModule('core/version-controller.js');
+    // BUILD_STRIP_END
 
     // --- SDK Facade ---
 
@@ -79,6 +96,7 @@
         config = config || {};
 
         if (instance) {
+            console.warn('rewind: RewindSDK.init() called again. Destroying previous instance.');
             instance.destroy();
         }
 
@@ -146,6 +164,7 @@
             /** Stop tracking and clean up timers */
             destroy: function() {
                 versionController.destroy();
+                instance._destroyed = true;
                 instance = null;
                 modules = null;
             },
@@ -237,6 +256,9 @@
             on: function(callback) {
                 return versionController.on(callback);
             },
+            off: function(callback) {
+                return versionController.off(callback);
+            },
 
             // --- GitHub ---
             github: {
@@ -301,26 +323,40 @@
      * @returns {object} Rewind SDK instance
      */
     function mountUI(selector, config) {
-        // Initialize SDK if not already done
         if (!instance) {
             init(config);
         }
 
         // Load UI module if not already loaded
         if (typeof RewindUI === 'undefined') {
-            loadModule('ui/rewind-ui.js');
+            // Try to load from the SDK directory
+            if (typeof sdkRoot !== 'undefined') {
+                loadModule('ui/rewind-ui.js');
+            } else {
+                throw new Error(
+                    'RewindUI not loaded. When using the core-only bundle, ' +
+                    'include rewind-with-ui.js instead, or load rewind-ui.js separately.'
+                );
+            }
         }
 
         // Load UI styles
         var styleId = 'rewind-sdk-styles';
         if (!document.getElementById(styleId)) {
-            var cssPath = nodePath.join(sdkRoot, 'ui', 'rewind-ui.css');
-            if (fs.existsSync(cssPath)) {
-                var css = fs.readFileSync(cssPath, 'utf8');
-                var style = document.createElement('style');
-                style.id = styleId;
-                style.textContent = css;
-                document.head.appendChild(style);
+            var cssLoaded = false;
+            if (typeof sdkRoot !== 'undefined') {
+                var cssPath = nodePath.join(sdkRoot, 'ui', 'rewind-ui.css');
+                if (fs.existsSync(cssPath)) {
+                    var css = fs.readFileSync(cssPath, 'utf8');
+                    var style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = css;
+                    document.head.appendChild(style);
+                    cssLoaded = true;
+                }
+            }
+            if (!cssLoaded) {
+                console.warn('rewind: UI styles not auto-loaded. Include rewind-ui.css manually.');
             }
         }
 

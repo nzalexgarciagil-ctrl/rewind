@@ -264,8 +264,10 @@ var RewindUI = (function() {
     }
 
     // --- Listen to SDK events ---
+    var sdkListener = null;
+
     function listenToSDK() {
-        sdk.on(function(event, data) {
+        sdkListener = function(event, data) {
             switch (event) {
                 case 'initialized':
                     showMainPanel();
@@ -316,7 +318,8 @@ var RewindUI = (function() {
                     refreshHistory();
                     break;
             }
-        });
+        };
+        sdk.on(sdkListener);
     }
 
     // --- Core Actions ---
@@ -350,8 +353,12 @@ var RewindUI = (function() {
             }
         }).catch(function(err) {
             showToast('Snapshot failed: ' + err.message, 'error');
-        }).finally(function() {
+        }).then(function(result) {
             els.snapshotBtn.disabled = false;
+            return result;
+        }, function(err) {
+            els.snapshotBtn.disabled = false;
+            throw err;
         });
     }
 
@@ -616,9 +623,14 @@ var RewindUI = (function() {
             if (st.initialized) setupGitHubRemote();
         }).catch(function(err) {
             showToast('GitHub auth failed: ' + err.message, 'error');
-        }).finally(function() {
+        }).then(function(result) {
             els.githubConnectBtn.disabled = false;
             els.githubConnectBtn.textContent = 'Connect';
+            return result;
+        }, function(err) {
+            els.githubConnectBtn.disabled = false;
+            els.githubConnectBtn.textContent = 'Connect';
+            throw err;
         });
     }
 
@@ -654,9 +666,14 @@ var RewindUI = (function() {
             showToast('Synced to GitHub', 'success');
         }).catch(function(err) {
             showToast('Sync failed: ' + err.message, 'error');
-        }).finally(function() {
+        }).then(function(result) {
             els.githubSyncBtn.disabled = false;
             els.githubSyncBtn.textContent = '\u21BB Sync';
+            return result;
+        }, function(err) {
+            els.githubSyncBtn.disabled = false;
+            els.githubSyncBtn.textContent = '\u21BB Sync';
+            throw err;
         });
     }
 
@@ -759,6 +776,10 @@ var RewindUI = (function() {
     function unmount() {
         if (savedTimer) clearInterval(savedTimer);
         if (toastTimer) clearTimeout(toastTimer);
+        if (sdkListener && sdk) {
+            sdk.off(sdkListener);
+            sdkListener = null;
+        }
         if (rootEl && rootEl.parentNode) {
             rootEl.parentNode.removeChild(rootEl);
         }

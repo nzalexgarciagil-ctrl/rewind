@@ -54,19 +54,8 @@ function buildCore() {
     // Read the entry file and strip the loadModule calls (modules are already inlined)
     var entry = readFile(ENTRY_FILE);
 
-    // Replace the loadModule section with a comment
-    entry = entry.replace(
-        /\/\/ Load core modules in dependency order[\s\S]*?loadModule\('core\/version-controller\.js'\);/,
-        '// Core modules loaded inline above'
-    );
-
-    // Remove the loadModule function and sdkRoot/fs/path declarations since they're not needed
-    entry = entry.replace(
-        /\/\/ Resolve SDK root path[\s\S]*?function loadModule\(relativePath\) \{[\s\S]*?\}/,
-        '// Modules are bundled inline - no dynamic loading needed\n' +
-        '    var fs = cep_node.require(\'fs\');\n' +
-        '    var nodePath = cep_node.require(\'path\');'
-    );
+    // Strip sections between BUILD_STRIP_START and BUILD_STRIP_END markers
+    entry = entry.replace(/\/\/ BUILD_STRIP_START[\s\S]*?\/\/ BUILD_STRIP_END/g, '');
 
     parts.push('// --- SDK Entry Point ---');
     parts.push(entry);

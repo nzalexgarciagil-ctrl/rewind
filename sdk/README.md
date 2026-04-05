@@ -4,14 +4,24 @@ Add git-based version control to any Adobe Premiere Pro CEP extension. Snapshots
 
 ## Quick Start
 
-**3 lines to add version control to your extension:**
-
+**With UI (recommended):**
 ```html
 <script src="rewind-sdk/rewind.js"></script>
 <script>
     RewindSDK.init({ autoSaveInterval: 60 });
     RewindSDK.mountUI('#my-panel');
+    // The UI has a "Start Tracking" button
 </script>
+```
+
+**Headless (no UI):**
+```js
+var rewind = RewindSDK.init({ autoSaveInterval: 60 });
+rewind.start().then(function() {
+    console.log('Tracking:', rewind.getState().projectPath);
+}).catch(function(err) {
+    console.error(err.message);
+});
 ```
 
 ## Installation
@@ -188,34 +198,25 @@ In your `manifest.xml`:
 
 In your `host.jsx`:
 ```jsx
+// Note: #include paths are relative to the INCLUDING file, not the project root
 #include "rewind-sdk/host/rewind-host.jsx"
 
 // Your own ExtendScript code below...
 ```
 
-### Option 3: Custom function name (if "handleMessage" conflicts)
+### Option 3: Existing `handleMessage` (no conflict)
 
-If your extension already defines a `handleMessage` function:
+If your extension already defines a global `handleMessage` function, just `#include` the
+Rewind host script. The SDK bridge defaults to the namespaced `RewindHost_handleMessage`,
+so there is no collision and no routing code needed:
 
 ```jsx
-// In your host.jsx, include Rewind first
 #include "rewind-sdk/host/rewind-host.jsx"
 
-// Then define your own handleMessage that routes Rewind commands
+// Your own handleMessage is untouched — Rewind uses RewindHost_handleMessage
 function handleMessage(type, dataStr) {
-    // Route Rewind commands
-    if (type === "getProjectPath" || type === "saveProject" ||
-        type === "closeProject" || type === "openProject" ||
-        type === "closeAndReopenProject") {
-        return RewindHost_handleMessage(type, dataStr);
-    }
     // Your own commands...
 }
-```
-
-Or use a completely separate function name:
-```js
-RewindSDK.init({ hostFunctionName: 'RewindHost_handleMessage' });
 ```
 
 ## Examples
@@ -241,9 +242,64 @@ This generates:
 
 ## Requirements
 
-- Adobe Premiere Pro 2022 or later
-- Git installed and available in PATH
-- CEP extensions enabled (`PlayerDebugMode` set to `1`)
+Before integrating, ensure your extension meets these requirements:
+
+### Manifest Requirements
+
+Your `manifest.xml` must include these CEFCommandLine parameters:
+
+```xml
+<CEFCommandLine>
+    <Parameter>--enable-nodejs</Parameter>
+    <Parameter>--mixed-context</Parameter>
+</CEFCommandLine>
+```
+
+Without these, the SDK will not load. You will see: "Rewind SDK requires Adobe CEP with Node.js enabled."
+
+### Prerequisites
+
+- **Git** installed and available in PATH ([download](https://git-scm.com/))
+- **Adobe Premiere Pro 2022** or later
+- **CSInterface.js** loaded before `rewind.js` (include it via a `<script>` tag)
+- **CEP debug mode** enabled (`PlayerDebugMode` set to `1`)
+
+### Content Security Policy
+
+If your extension sets a Content-Security-Policy, add these for GitHub integration:
+
+```
+default-src 'self' 'unsafe-inline' https://api.github.com;
+img-src 'self' data: https://*.githubusercontent.com;
+```
+
+## Error Handling
+
+All async methods return Promises. Always add `.catch()`:
+
+```js
+rewind.start().catch(function(err) {
+    console.error('Failed to start:', err.message);
+    // Common causes:
+    // - "Git not found" → install Git
+    // - "No project is currently open" → open a project first  
+    // - "ExtendScript call failed" → check ScriptPath in manifest.xml
+});
+
+rewind.snapshot('My save').catch(function(err) {
+    console.error('Snapshot failed:', err.message);
+});
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| "cep_node is not defined" or silent crash | Missing Node.js flags | Add `--enable-nodejs` and `--mixed-context` to manifest |
+| "CSInterface is not defined" | Script load order | Load CSInterface.js before rewind.js |
+| "ExtendScript call failed" | Missing host script | Set ScriptPath to rewind-host.jsx in manifest |
+| "Git not found" | Git not installed | Install Git, ensure it is in PATH |
+| UI mounts but no styles | CSS not loaded | Include rewind-ui.css via `<link>` tag |
 
 ## License
 

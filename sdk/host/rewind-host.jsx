@@ -8,9 +8,10 @@
 //      Add this line at the top of your host.jsx:
 //        #include "path/to/rewind-host.jsx"
 //
-// The host function name defaults to "handleMessage" but can be changed
-// to "RewindHost_handleMessage" if you have a naming conflict. If renamed,
-// pass { hostFunctionName: 'RewindHost_handleMessage' } to RewindSDK.init().
+// The namespaced function RewindHost_handleMessage is always defined and is the
+// default used by bridge.js. A global "handleMessage" convenience alias is only
+// created when one doesn't already exist, so #including this file into an
+// extension that already defines handleMessage will never clobber it.
 
 // JSON polyfill (Crockford with 4th replace fix) - safe to include multiple times
 if (typeof JSON !== "object") {
@@ -171,8 +172,8 @@ RewindHost.closeAndReopenProject = function(data) {
     return "reopened";
 };
 
-// Default handler name - compatible with bridge.js default
-function handleMessage(type, dataStr) {
+// Namespaced handler - always available, never conflicts
+function RewindHost_handleMessage(type, dataStr) {
     var result;
     try {
         var data = {};
@@ -185,7 +186,7 @@ function handleMessage(type, dataStr) {
             case "closeProject": result = RewindHost.closeProject(); break;
             case "openProject": result = RewindHost.openProject(data); break;
             case "closeAndReopenProject": result = RewindHost.closeAndReopenProject(data); break;
-            default: return JSON.stringify({ error: "Unknown command: " + type });
+            default: return JSON.stringify({ error: "Unknown Rewind command: " + type });
         }
         return JSON.stringify({ success: true, result: result });
     } catch (e) {
@@ -193,5 +194,7 @@ function handleMessage(type, dataStr) {
     }
 }
 
-// Alternative namespaced handler (use if "handleMessage" conflicts)
-var RewindHost_handleMessage = handleMessage;
+// Only define global handleMessage if one doesn't already exist
+if (typeof handleMessage === "undefined") {
+    handleMessage = RewindHost_handleMessage;
+}
