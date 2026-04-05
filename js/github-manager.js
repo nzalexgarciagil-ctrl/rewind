@@ -8,13 +8,11 @@
     var path = cep_node.require('path');
     var os = cep_node.require('os');
     var crypto = cep_node.require('crypto');
-    var childProcess = cep_node.require('child_process');
 
     var CREDENTIALS_DIR = path.join(os.homedir(), '.rewind');
     var CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'credentials.json');
     var OLD_CREDENTIALS_DIR = path.join(os.homedir(), '.ppgit');
     var OLD_CREDENTIALS_FILE = path.join(OLD_CREDENTIALS_DIR, 'credentials.json');
-    var GIT_EXE = 'git';
     var GITHUB_API = 'api.github.com';
 
     var cachedToken = null;
@@ -94,9 +92,11 @@
         });
     }
 
+    // Delegate git operations to GitManager (loaded before this module)
     function runGit(repoPath, args) {
         return new Promise(function(resolve, reject) {
-            childProcess.execFile(GIT_EXE, args, {
+            var childProcess = cep_node.require('child_process');
+            childProcess.execFile('git', args, {
                 cwd: repoPath,
                 maxBuffer: 10 * 1024 * 1024,
                 windowsHide: true
@@ -358,10 +358,9 @@
         });
     }
 
+    // Delegate to GitManager (loaded before this module) to avoid duplication
     function getCurrentBranch(repoPath) {
-        return runGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(function() {
-            return 'master';
-        });
+        return window.GitManager.getCurrentBranch(repoPath);
     }
 
     // --- Public API ---

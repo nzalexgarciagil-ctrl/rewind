@@ -386,6 +386,6 @@
         /** Get the current SDK instance (null if not initialized) */
         getInstance: function() { return instance; },
         /** SDK version */
-        version: '1.0.0'
+        version: '1.1.0'
     };
 })();

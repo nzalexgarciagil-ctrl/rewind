@@ -1,4 +1,4 @@
-// host.jsx - ppgit ExtendScript backend for Premiere Pro (ES3)
+// host.jsx - Rewind ExtendScript backend for Premiere Pro (ES3)
 // Commands: getProjectPath, saveProject, closeAndReopenProject
 
 // JSON polyfill (Crockford with 4th replace fix)

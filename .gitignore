@@ -19,6 +19,9 @@ dist/
 
 # Credentials (never commit)
 credentials.json
+
+# Version control directories (never commit)
+.rewind/
 .ppgit/
 
 # Debug (remove for production builds)
