@@ -492,6 +492,7 @@
         console.log('rewind: switching to version "' + targetName + '" (branch: ' + gitBranch + ')...');
 
         var savedProjectPath = state.projectPath;
+        var switchXml;
 
         // 1. Save current state
         return Bridge.callHost('saveProject').then(function() {
@@ -513,8 +514,7 @@
             return fs.promises.readFile(state.xmlPath, 'utf8');
         // 4. Close project FIRST (before writing .prproj to avoid freeze)
         }).then(function(xml) {
-            // Store xml for step 6
-            state._switchXml = xml;
+            switchXml = xml;
             console.log('rewind: closing project...');
             return Bridge.callHost('closeProject');
         // 5. Wait for PPro to release the file
@@ -523,10 +523,9 @@
         // 6. Write .prproj (project is now closed, no file lock)
         }).then(function() {
             console.log('rewind: compressing to .prproj...');
-            return PrprojHandler.compress(state._switchXml, state.projectPath);
+            return PrprojHandler.compress(switchXml, state.projectPath);
         // 7. Reopen the project
         }).then(function() {
-            delete state._switchXml;
             console.log('rewind: reopening project...');
             return Bridge.callHost('openProject', { path: savedProjectPath });
         }).then(function() {

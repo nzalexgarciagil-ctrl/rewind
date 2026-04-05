@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="11.0" ExtensionBundleId="com.rewind.versioncontrol"
-  ExtensionBundleVersion="1.0.0" ExtensionBundleName="Rewind"
+  ExtensionBundleVersion="1.1.0" ExtensionBundleName="Rewind"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <ExtensionList>
-    <Extension Id="com.rewind.versioncontrol.panel" Version="1.0.0" />
+    <Extension Id="com.rewind.versioncontrol.panel" Version="1.1.0" />
   </ExtensionList>
 
   <ExecutionEnvironment>
@@ -27,6 +27,7 @@
           <ScriptPath>./host/host.jsx</ScriptPath>
           <CEFCommandLine>
             <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
           </CEFCommandLine>
         </Resources>
         <Lifecycle>

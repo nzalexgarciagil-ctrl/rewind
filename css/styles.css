@@ -364,6 +364,22 @@ body {
     cursor: not-allowed;
 }
 
+/* ---- JS-TOGGLED PANELS (hidden by default, shown via JS) ---- */
+#github-panel,
+#github-info,
+#main-panel,
+#version-dropdown,
+#empty-state,
+#load-more {
+    display: none;
+}
+
+#main-panel {
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
 /* ---- INIT STATE ---- */
 .init-panel {
     flex: 1;
@@ -386,9 +402,9 @@ body {
     line-height: 1.5;
 }
 
-.init-subtitle {
+.init-panel .init-subtitle {
     font-size: 11px;
-    color: #666 !important;
+    color: #666;
     margin-top: -4px;
 }
 

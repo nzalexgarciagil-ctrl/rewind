@@ -5,7 +5,6 @@
 
     var zlib = cep_node.require('zlib');
     var fs = cep_node.require('fs');
-    var path = cep_node.require('path');
 
     /**
      * Decompress a .prproj file to XML string

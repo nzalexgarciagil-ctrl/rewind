@@ -21,7 +21,7 @@
     </div>
 
     <!-- GitHub Setup Panel (shown when not connected) -->
-    <div id="github-panel" class="github-panel" style="display:none;">
+    <div id="github-panel" class="github-panel">
         <div class="github-setup">
             <div class="icon">&#128279;</div>
             <p class="github-heading">Connect to GitHub</p>
@@ -35,7 +35,7 @@
     </div>
 
     <!-- GitHub Connected Info -->
-    <div id="github-info" class="github-info" style="display:none;">
+    <div id="github-info" class="github-info">
         <div class="github-user-row">
             <img id="github-avatar" class="github-avatar" src="" alt="">
             <span id="github-username" class="github-username"></span>
@@ -53,7 +53,7 @@
     </div>
 
     <!-- Main Panel (shown when tracking) -->
-    <div id="main-panel" style="display:none; flex-direction:column; flex:1; min-height:0;">
+    <div id="main-panel">
 
         <!-- Version selector + project info bar -->
         <div class="version-bar">
@@ -62,7 +62,7 @@
                     <span id="current-version-name">Main Edit</span>
                     <span class="dropdown-arrow">&#9662;</span>
                 </button>
-                <div id="version-dropdown" class="version-dropdown" style="display:none;">
+                <div id="version-dropdown" class="version-dropdown">
                     <div id="version-list" class="version-list"></div>
                     <div class="version-dropdown-divider"></div>
                     <button id="new-version-btn" class="new-version-option">+ New Version</button>
@@ -76,8 +76,8 @@
 
         <div id="timeline-container" class="timeline-container">
             <div id="timeline" class="timeline"></div>
-            <div id="empty-state" class="empty-state" style="display:none;">No snapshots yet</div>
-            <div id="load-more" class="load-more" style="display:none;">
+            <div id="empty-state" class="empty-state">No snapshots yet</div>
+            <div id="load-more" class="load-more">
                 <button id="load-more-btn" class="load-more-btn">Load more</button>
             </div>
         </div>

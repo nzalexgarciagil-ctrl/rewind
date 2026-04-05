@@ -40,7 +40,8 @@ function readFile(relativePath) {
 
 function buildCore() {
     var parts = [];
-    parts.push('// Rewind SDK v1.0.0 - Built ' + new Date().toISOString().split('T')[0]);
+    var pkg = JSON.parse(fs.readFileSync(path.join(SDK_DIR, '..', 'package.json'), 'utf8'));
+    parts.push('// Rewind SDK v' + pkg.version + ' - Built ' + new Date().toISOString().split('T')[0]);
     parts.push('// https://github.com/nzalexgarciagil-ctrl/premiere-git');
     parts.push('');
 

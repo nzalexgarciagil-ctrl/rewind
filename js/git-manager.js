@@ -4,7 +4,6 @@
     'use strict';
 
     var childProcess = cep_node.require('child_process');
-    var path = cep_node.require('path');
     var fs = cep_node.require('fs');
 
     var GIT_EXE = 'git';
