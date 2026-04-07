@@ -15,7 +15,6 @@ node_modules/
 # Build artifacts
 *.zxp
 build/
-dist/
 
 # Credentials (never commit)
 credentials.json

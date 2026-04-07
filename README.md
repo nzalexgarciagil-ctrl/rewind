@@ -178,6 +178,12 @@ YourProject/
 
 ---
 
+## For Developers
+
+Want to add version control to your own Premiere Pro extension? Check out the [Rewind SDK](https://github.com/nzalexgarciagil-ctrl/rewind-sdk) — add snapshots, named versions, restore, and GitHub backup to any CEP extension with a single script tag.
+
+---
+
 ## Contributing
 
 Contributions welcome! This is an open source project.
