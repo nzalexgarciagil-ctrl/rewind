@@ -6,7 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nzalexgarciagil-ctrl/premiere-git.git"
+    "url": "https://github.com/nzalexgarciagil-ctrl/rewind.git"
+  },
+  "homepage": "https://github.com/nzalexgarciagil-ctrl/rewind",
+  "bugs": {
+    "url": "https://github.com/nzalexgarciagil-ctrl/rewind/issues"
   },
   "scripts": {},
   "engines": {
